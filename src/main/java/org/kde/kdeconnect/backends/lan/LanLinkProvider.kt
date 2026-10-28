@@ -120,11 +120,6 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
             return null
         }
 
-        if (rateLimitByDeviceId(deviceId)) {
-            Log.i("LanLinkProvider", "Discarding second packet from the same device $deviceId received too quickly")
-            return null
-        }
-
         val deviceTrusted = TrustedDevices.isTrustedDevice(context, deviceId)
         if (!deviceTrusted && !TrustedNetworkHelper.isTrustedNetwork(context)) {
             Log.i("KDE/LanLinkProvider", "Ignoring identity packet because the device is not trusted and I'm not on a trusted network.")
@@ -248,7 +243,8 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
 
         var socket: Socket? = null
         try {
-            socket = SocketFactory.getDefault().createSocket(address, tcpPort)
+            socket = SocketFactory.getDefault().createSocket()
+            socket.connect(InetSocketAddress(address, tcpPort), TCP_CONNECT_TIMEOUT)
             configureSocket(socket)
 
             val myDeviceInfo = DeviceHelper.getDeviceInfo(context)
@@ -302,6 +298,13 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
     ) {
         val deviceId = identityPacket.getString("deviceId")
         val protocolVersion = identityPacket.getInt("protocolVersion")
+
+        // An unreachable interface must not throttle another address of the same peer.
+        if (rateLimitByDeviceId(deviceId)) {
+            Log.i("LanLinkProvider", "Discarding a repeated TCP connection for $deviceId")
+            socket.closeSafe()
+            return
+        }
 
         if (deviceTrusted && isProtocolDowngrade(deviceId, protocolVersion)) {
             Log.w("KDE/LanLinkProvider", "Refusing to connect to a device using an older protocol version:$protocolVersion")
@@ -655,6 +658,7 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
 
         private const val MAX_RATE_LIMIT_ENTRIES: Int = 255
         private const val MAX_UNPAIRED_CONNECTIONS: Int = 42
+        private const val TCP_CONNECT_TIMEOUT: Int = 5_000
         private const val DELAY_BETWEEN_BROADCASTS: Long = 200
 
         @Throws(IOException::class)

@@ -235,6 +235,12 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
         </activity>
 
         <activity
+            android:name="org.kde.kdeconnect.plugins.controlpanel.ControlPanelActivity"
+            android:label="@string/control_panel_title"
+            android:exported="false"
+            android:parentActivityName="org.kde.kdeconnect.ui.MainActivity" />
+
+        <activity
             android:name="org.kde.kdeconnect.plugins.runcommand.FullScreenRunCommandActivity"
             android:exported="false"
             android:parentActivityName="org.kde.kdeconnect.plugins.runcommand.RunCommandActivity" />

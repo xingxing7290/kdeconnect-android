@@ -27,6 +27,8 @@ data class PanelActionRequest(
     val protocolVersion: Int = 1,
     val operation: String = "action",
     val requestId: String,
+    val sessionId: String,
+    val sequence: Long,
     val revision: Long,
     val buttonId: String,
 )
@@ -39,13 +41,25 @@ class PanelSession(
     private data class Pending(val request: PanelActionRequest, val sentAt: Long)
     private val pending = LinkedHashMap<String, Pending>()
     private var hasSessionConfig = false
+    private var nextSequence = 1L
+    var sessionId: String = ""
+        private set
     private val mutableState = MutableStateFlow(PanelSessionState())
     val state = mutableState.asStateFlow()
+
+    @Synchronized
+    fun restoreDisplay(raw: String) {
+        if (mutableState.value.connection != PanelConnection.DISCONNECTED) return
+        val config = try { PanelConfig.parse(raw) } catch (_: IllegalArgumentException) { return }
+        mutableState.value = mutableState.value.copy(config = config, activePageId = config.activePageId)
+    }
 
     @Synchronized
     fun connected() {
         pending.clear()
         hasSessionConfig = false
+        sessionId = UUID.randomUUID().toString()
+        nextSequence = 1L
         mutableState.value = mutableState.value.copy(
             connection = PanelConnection.SYNCING, pendingButtons = emptySet(), lastResult = null, error = ""
         )
@@ -58,6 +72,20 @@ class PanelSession(
         mutableState.value = mutableState.value.copy(
             connection = PanelConnection.DISCONNECTED, pendingButtons = emptySet(), lastResult = null, error = "offline"
         )
+    }
+
+    @Synchronized
+    fun failed(error: String) {
+        pending.clear()
+        mutableState.value = mutableState.value.copy(connection = PanelConnection.ERROR, pendingButtons = emptySet(), error = error.take(120))
+    }
+
+    @Synchronized
+    fun retrySynchronization() {
+        if (mutableState.value.connection != PanelConnection.DISCONNECTED) {
+            pending.clear()
+            mutableState.value = mutableState.value.copy(connection = PanelConnection.SYNCING, pendingButtons = emptySet(), error = "")
+        }
     }
 
     @Synchronized
@@ -112,7 +140,10 @@ class PanelSession(
         val config = checkNotNull(current.config)
         require(config.button(buttonId) != null) { "unknown_button" }
         check(buttonId !in current.pendingButtons && pending.size < 32) { "request_pending" }
-        val request = PanelActionRequest(requestId = newRequestId(), revision = config.revision, buttonId = buttonId)
+        check(nextSequence <= PanelConfig.MAX_REVISION) { "sequence_exhausted" }
+        val request = PanelActionRequest(
+            requestId = newRequestId(), sessionId = sessionId, sequence = nextSequence++, revision = config.revision, buttonId = buttonId
+        )
         check(request.requestId !in pending) { "duplicate_request_id" }
         pending[request.requestId] = Pending(request, elapsedMillis())
         mutableState.value = current.copy(pendingButtons = current.pendingButtons + buttonId, lastResult = null)

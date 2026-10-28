@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_panel_title">Control panel</string>
+    <string name="control_panel_description">Display the paired computer’s configurable control panel</string>
+    <string name="control_panel_syncing">Synchronizing with computer…</string>
+    <string name="control_panel_offline">Computer offline — controls disabled</string>
+    <string name="control_panel_empty">Add buttons in the desktop control panel editor.</string>
+    <string name="control_panel_empty_slot">Empty slot %1$d</string>
+    <string name="control_panel_retry">Synchronize</string>
+    <string name="control_panel_back">Back</string>
+    <string name="control_panel_success">Action sent to computer</string>
+    <string name="control_panel_failed">Action failed: %1$s</string>
+    <string name="control_panel_unavailable">This computer does not have the control panel plugin enabled.</string>
+    <string name="control_panel_volume">Volume</string>
+    <string name="control_panel_mute">Mute</string>
+    <string name="control_panel_unmute">Unmute</string>
+</resources>

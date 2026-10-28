@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_panel_title">控制面板</string>
+    <string name="control_panel_description">显示已配对电脑的自定义控制面板</string>
+    <string name="control_panel_syncing">正在同步电脑配置…</string>
+    <string name="control_panel_offline">电脑已离线，控制按钮暂不可用</string>
+    <string name="control_panel_empty">请在电脑端控制面板中添加按钮。</string>
+    <string name="control_panel_empty_slot">空槽位 %1$d</string>
+    <string name="control_panel_retry">重新同步</string>
+    <string name="control_panel_back">返回</string>
+    <string name="control_panel_success">动作已发送至电脑</string>
+    <string name="control_panel_failed">动作失败：%1$s</string>
+    <string name="control_panel_unavailable">此电脑尚未启用控制面板插件。</string>
+    <string name="control_panel_volume">音量</string>
+    <string name="control_panel_mute">静音</string>
+    <string name="control_panel_unmute">取消静音</string>
+</resources>

@@ -5,7 +5,8 @@
  */
 package org.kde.kdeconnect.ui
 
-import android.content.Intent
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -14,11 +15,16 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.StringRes
 import androidx.annotation.UiThread
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.MenuProvider
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.Device
@@ -30,7 +36,11 @@ import org.kde.kdeconnect.extensions.setupBottomPadding
 import org.kde.kdeconnect.helpers.security.SslHelper
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.battery.BatteryPlugin
+import org.kde.kdeconnect.plugins.connectivityreport.ConnectivityReportPlugin
 import org.kde.kdeconnect.ui.compose.KdeTheme
+import org.kde.kdeconnect.ui.compose.screen.device.DeviceErrorScreen
+import org.kde.kdeconnect.ui.compose.screen.device.DevicePairingScreen
+import org.kde.kdeconnect.ui.compose.screen.device.DeviceViewModel
 import org.kde.kdeconnect.ui.compose.screen.device.PluginsScreen
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.ActivityDeviceBinding
@@ -44,12 +54,13 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
         private const val ARG_DEVICE_ID = "deviceId"
         private const val ARG_FROM_DEVICE_LIST = "fromDeviceList"
         private const val TAG = "KDE/DeviceFragment"
-        fun newInstance(deviceId: String?, fromDeviceList: Boolean): DeviceFragment {
-            val frag = DeviceFragment()
-            val args = Bundle()
-            args.putString(ARG_DEVICE_ID, deviceId)
-            args.putBoolean(ARG_FROM_DEVICE_LIST, fromDeviceList)
-            frag.arguments = args
+        fun newInstance(deviceId: String, fromDeviceList: Boolean): DeviceFragment {
+            val frag = DeviceFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_DEVICE_ID, deviceId)
+                    putBoolean(ARG_FROM_DEVICE_LIST, fromDeviceList)
+                }
+            }
             return frag
         }
     }
@@ -63,19 +74,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
 
     private val device by lazy { KdeConnect.getInstance().getDevice(deviceId) }
 
-    /**
-     * Not-yet-paired ViewBinding.
-     *
-     * Used to start and retry pairing.
-     */
-    private val pairingBinding get() = binding.pairRequest
-
-    /**
-     * Cannot-communicate ViewBinding.
-     *
-     * Used when the remote device is unreachable.
-     */
-    private val errorBinding get() = binding.pairError
+    private val viewModel by viewModels<DeviceViewModel>()
 
     override fun onInflateBinding(
         inflater: LayoutInflater,
@@ -109,8 +108,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                     true
                 }
             }
-            val intent = Intent(mActivity, PluginSettingsActivity::class.java)
-            intent.putExtra("deviceId", deviceId)
+            val intent = PluginSettingsActivity.createIntent(mActivity!!, deviceId)
             menu.add(R.string.device_menu_plugins).setOnMenuItemClickListener {
                 startActivity(intent)
                 true
@@ -169,28 +167,6 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding.deviceView.setupBottomPadding()
-        errorBinding.errorMessageContainer.setOnRefreshListener {
-            this.refreshDevicesAction()
-        }
-        pairingBinding.pairButton.setOnClickListener {
-            device?.requestPairing()
-            refreshUI()
-        }
-        pairingBinding.acceptButton.setOnClickListener {
-            device?.apply {
-                acceptPairing()
-                pairingBinding.pairingButtons.visibility = View.GONE
-            }
-        }
-        pairingBinding.rejectButton.setOnClickListener {
-            device?.apply {
-                // Remove listener so buttons don't show for an instant before changing the view
-                removePluginsChangedListener(pluginsChangedListener)
-                removePairingCallback(pairingCallback)
-                cancelPairing()
-            }
-            (mActivity as? MainActivity)?.onDeviceSelected(null)
-        }
         device?.apply {
             mActivity?.supportActionBar?.title = name
             removePairingCallback(pairingCallback)
@@ -207,16 +183,16 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
 
     private fun refreshDevicesAction() {
         BackgroundService.ForceRefreshConnections(requireContext())
-        errorBinding.errorMessageContainer.isRefreshing = true
-        errorBinding.errorMessageContainer.postDelayed({
+        viewModel.setRefreshing(refreshing = true)
+        binding.deviceView.postDelayed({
             if (isResumed && !isDetached) { // the view might be destroyed by now
-                errorBinding.errorMessageContainer.isRefreshing = false
+                viewModel.setRefreshing(refreshing = false)
             }
         }, 1500)
     }
 
     override fun onPause() {
-        errorBinding.errorMessageContainer.isRefreshing = false
+        viewModel.setRefreshing(refreshing = false)
         super.onPause()
     }
 
@@ -247,75 +223,79 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
         //Once in-app, there is no point in keep displaying the notification if any
         device.hidePairingNotification()
 
-        when (device.pairStatus) {
-            PairingHandler.PairState.NotPaired -> {
-                errorBinding.errorMessageContainer.visibility = View.GONE
-                binding.deviceView.visibility = View.GONE
-                pairingBinding.pairingButtons.visibility = View.VISIBLE
-                pairingBinding.pairVerification.visibility = View.GONE
-            }
+        binding.deviceView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                KdeTheme(context) {
+                    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+                    val pairingErrorMessage by viewModel.pairingErrorMessage.collectAsStateWithLifecycle()
 
-            PairingHandler.PairState.Requested -> {
-                with(pairingBinding) {
-                    pairButton.visibility = View.GONE
-                    pairMessage.text = getString(R.string.pair_requested)
-                    pairProgress.visibility = View.VISIBLE
-                    pairVerification.text = device.verificationKey
-                    pairVerification.visibility = View.VISIBLE
-                }
-            }
-
-            PairingHandler.PairState.RequestedByPeer -> {
-                with(pairingBinding) {
-                    pairMessage.setText(R.string.pair_requested)
-                    pairVerification.visibility = View.VISIBLE
-                    pairingButtons.visibility = View.VISIBLE
-                    pairProgress.visibility = View.GONE
-                    pairButton.visibility = View.GONE
-                    pairRequestButtons.visibility = View.VISIBLE
-                    pairVerification.text = device.verificationKey
-                    pairVerification.visibility = View.VISIBLE
-                }
-                binding.deviceView.visibility = View.GONE
-            }
-
-            PairingHandler.PairState.Paired -> {
-                pairingBinding.pairingButtons.visibility = View.GONE
-                if (device.isReachable) {
-                    val context = requireContext()
-                    val pluginsWithButtons =
-                        device.loadedPlugins.values.flatMap { it.getUiButtons() }
-                    val pluginsNeedPermissions =
-                        device.pluginsWithoutPermissions.values.filter { device.isPluginEnabled(it.pluginKey) }
-                    val pluginsNeedOptionalPermissions =
-                        device.pluginsWithoutOptionalPermissions.values.filter {
-                            device.isPluginEnabled(it.pluginKey)
-                        }
-                    errorBinding.errorMessageContainer.visibility = View.GONE
-                    binding.deviceView.visibility = View.VISIBLE
-                    binding.deviceViewCompose.apply {
-                        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-                        setContent {
-                            KdeTheme(context) {
+                    when (device.pairStatus) {
+                        PairingHandler.PairState.Paired -> {
+                            if (device.isReachable) {
+                                val pluginsWithButtons =
+                                    device.loadedPlugins.values.flatMap { plugin -> plugin.getUiButtons() }
+                                val pluginsNeedPermissions =
+                                    device.pluginsWithoutPermissions.values.filter { plugin ->
+                                        device.isPluginEnabled(plugin.pluginKey)
+                                    }
+                                val pluginsNeedOptionalPermissions =
+                                    device.pluginsWithoutOptionalPermissions.values.filter { plugin ->
+                                        device.isPluginEnabled(plugin.pluginKey)
+                                    }
                                 PluginsScreen(
                                     pluginsWithButtons = pluginsWithButtons,
                                     pluginsNeedPermissions = pluginsNeedPermissions,
                                     pluginsNeedOptionalPermissions = pluginsNeedOptionalPermissions,
                                     onButtonClick = { button -> button.onClick(mActivity!!) },
-                                    action = { plugin ->
+                                    actionNeedPermissions = { plugin ->
+                                        plugin.permissionExplanationDialog.show(
+                                            childFragmentManager,
+                                            null
+                                        )
+                                    },
+                                    actionNeedOptionalPermissions = { plugin ->
                                         plugin.optionalPermissionExplanationDialog.show(
                                             childFragmentManager,
                                             null
                                         )
                                     }
                                 )
+                                displayBatteryInfoIfPossible()
+                            } else {
+                                DeviceErrorScreen(
+                                    isRefreshing = isRefreshing,
+                                    onRefresh = { refreshDevicesAction() }
+                                )
                             }
                         }
+
+                        else -> {
+                            DevicePairingScreen(
+                                pairStatus = device.pairStatus,
+                                verificationKey = device.verificationKey ?: "",
+                                pairMessage = pairingErrorMessage,
+                                onRequestPairing = {
+                                    viewModel.setPairingErrorMessage(message =null)
+                                    device.requestPairing()
+                                    refreshUI()
+                                },
+                                onAcceptPairing = {
+                                    device.acceptPairing()
+                                    refreshUI()
+                                },
+                                onRejectPairing = {
+                                    device.apply {
+                                        // Remove listener so buttons don't show for an instant before changing the view
+                                        removePluginsChangedListener(pluginsChangedListener)
+                                        removePairingCallback(pairingCallback)
+                                        cancelPairing()
+                                    }
+                                    (mActivity as? MainActivity)?.onDeviceSelected(null)
+                                }
+                            )
+                        }
                     }
-                    displayBatteryInfoIfPossible()
-                } else {
-                    errorBinding.errorMessageContainer.visibility = View.VISIBLE
-                    binding.deviceView.visibility = View.GONE
                 }
             }
         }
@@ -329,30 +309,31 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
             }
 
             override fun pairingSuccessful() {
-                pairingBinding.pairMessage.announceForAccessibility(getString(R.string.pair_succeeded))
+                val accessibilityManager =
+                    requireContext().getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+                if (accessibilityManager?.isEnabled == true) {
+                    @Suppress("DEPRECATION")
+                    val event = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        AccessibilityEvent(AccessibilityEvent.TYPE_ANNOUNCEMENT)
+                    } else {
+                        AccessibilityEvent.obtain(AccessibilityEvent.TYPE_ANNOUNCEMENT)
+                    }
+                    event.text.add(getString(R.string.pair_succeeded))
+                    accessibilityManager.sendAccessibilityEvent(event)
+                }
                 mActivity?.runOnUiThread { refreshUI() }
             }
 
             override fun pairingFailed(error: String) {
                 mActivity?.runOnUiThread {
-                    with(pairingBinding) {
-                        pairMessage.text = error
-                        pairProgress.visibility = View.GONE
-                        pairButton.visibility = View.VISIBLE
-                        pairRequestButtons.visibility = View.GONE
-                    }
+                    viewModel.setPairingErrorMessage(message =error)
                     refreshUI()
                 }
             }
 
             override fun unpaired(device: Device) {
                 mActivity?.runOnUiThread {
-                    with(pairingBinding) {
-                        pairMessage.setText(R.string.device_not_paired)
-                        pairProgress.visibility = View.GONE
-                        pairButton.visibility = View.VISIBLE
-                        pairRequestButtons.visibility = View.GONE
-                    }
+                    viewModel.setPairingErrorMessage(message =null)
                     refreshUI()
                 }
             }
@@ -360,29 +341,44 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
 
 
     /**
-     * This method tries to display battery info for the remote device. Includes
-     *
-     *  * Current charge as a percentage
-     *  * Whether the remote device is low on power
-     *  * Whether the remote device is currently charging
-     *
+     * This method tries to display status info (battery and connectivity) for the remote device.
      */
     private fun displayBatteryInfoIfPossible() {
-        val batteryPlugin = device?.getPlugin(BatteryPlugin::class.java)
+        val batteryPlugin = device?.getPlugin<BatteryPlugin>()
+        val connectivityPlugin = device?.getPlugin<ConnectivityReportPlugin>()
 
-        val info = batteryPlugin?.remoteBatteryInfo
-        if (info != null) {
-
+        val batteryInfo = batteryPlugin?.remoteBatteryInfo
+        val batteryStatus = if (batteryInfo != null) {
             @StringRes
             val resId = when {
-                info.isCharging -> R.string.battery_status_charging_format
-                BatteryPlugin.isLowBattery(info) -> R.string.battery_status_low_format
+                batteryInfo.isCharging -> R.string.battery_status_charging_format
+                BatteryPlugin.isLowBattery(batteryInfo) -> R.string.battery_status_low_format
                 else -> R.string.battery_status_format
             }
-
-            mActivity?.supportActionBar?.subtitle = mActivity?.getString(resId, info.currentCharge)
+            mActivity?.getString(resId, batteryInfo.currentCharge)
         } else {
-            mActivity?.supportActionBar?.subtitle = null
+            null
         }
+
+        val connectivityInfoMap = connectivityPlugin?.remoteConnectivityInfo
+        val connectivityStatus = if (!connectivityInfoMap.isNullOrEmpty()) {
+            connectivityInfoMap.values
+                .map { it.networkType }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .joinToString(", ")
+                .ifEmpty { null }
+        } else {
+            null
+        }
+
+        val fullSubtitle = when {
+            batteryStatus != null && connectivityStatus != null -> "$batteryStatus  •  $connectivityStatus"
+            batteryStatus != null -> batteryStatus
+            connectivityStatus != null -> connectivityStatus
+            else -> null
+        }
+
+        mActivity?.supportActionBar?.subtitle = fullSubtitle
     }
 }

@@ -1,5 +1,7 @@
 package org.kde.kdeconnect.plugins.runcommand;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -7,6 +9,7 @@ import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -16,9 +19,9 @@ import androidx.preference.PreferenceManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.kde.kdeconnect.KdeConnect;
 import org.kde.kdeconnect.base.BaseActivity;
+import org.kde.kdeconnect_tp.R;
 import org.kde.kdeconnect_tp.databinding.ActivityRunCommandFullscreenBinding;
 
 import java.util.ArrayList;
@@ -128,17 +131,17 @@ public class FullScreenRunCommandActivity extends BaseActivity<ActivityRunComman
 
         try {
             commandItems = new ArrayList<>();
-            List<JSONObject> commandList = plugin.getCommandList();
+            List<CommandInfo> commandList = plugin.getCommandList();
 
-            for (JSONObject obj : commandList) {
-                try {
-                    commandItems.add(new CommandEntry(obj));
-                } catch (JSONException e) {
-                    Log.e("RunCommand", "Error parsing command: " + obj.toString(), e);
-                }
+            for (CommandInfo info : commandList) {
+                commandItems.add(new CommandEntry(info));
             }
+            commandItems.sort((left, right) -> left.getName().compareToIgnoreCase(right.getName()));
 
             if (commandItems.isEmpty()) {
+                if (commandAdapter != null) {
+                    commandAdapter.setCommands(commandItems);
+                }
                 getBinding().addCommandExplanation.setVisibility(View.VISIBLE);
                 return;
             }
@@ -154,6 +157,10 @@ public class FullScreenRunCommandActivity extends BaseActivity<ActivityRunComman
                             new ArrayList<>(commandItems),
                             (CommandEntry command) -> {
                                 plugin.runCommand(command.getKey());
+                                return kotlin.Unit.INSTANCE;
+                            },
+                            (CommandEntry command) -> {
+                                copyCommandToClipboard(command);
                                 return kotlin.Unit.INSTANCE;
                             }
                     );
@@ -196,13 +203,20 @@ public class FullScreenRunCommandActivity extends BaseActivity<ActivityRunComman
         }
     }
 
+    private void copyCommandToClipboard(CommandEntry command) {
+        String url = "kdeconnect://runcommand/" + deviceId + "/" + command.getKey();
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText("Command", url));
+        Toast.makeText(this, R.string.clipboard_toast, Toast.LENGTH_SHORT).show();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
-        deviceId = getIntent().getStringExtra("deviceId");
+        deviceId = getIntent().getStringExtra(RunCommandActivity.EXTRA_DEVICE_ID);
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         updateView();
     }

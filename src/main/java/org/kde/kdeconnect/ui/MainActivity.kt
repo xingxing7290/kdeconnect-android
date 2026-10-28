@@ -2,15 +2,14 @@
  * SPDX-FileCopyrightText: 2023 Albert Vaca Cintora <albertvaka@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 
 package org.kde.kdeconnect.ui
 
 import android.Manifest
-import android.content.Intent
 import android.content.SharedPreferences
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
-import android.content.pm.PackageManager
+import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -21,6 +20,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -35,18 +35,12 @@ import androidx.drawerlayout.widget.DrawerLayout
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import com.google.android.material.navigation.NavigationView
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import org.apache.commons.lang3.ArrayUtils
 import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.Device
-import org.kde.kdeconnect.helpers.DeviceHelper
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.extensions.setOnApplyWindowInsetsListenerCompat
-import org.kde.kdeconnect.plugins.share.ShareSettingsFragment
+import org.kde.kdeconnect.helpers.DeviceHelper
 import org.kde.kdeconnect.ui.about.AboutFragment
-import org.kde.kdeconnect.ui.about.getApplicationAboutData
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.ActivityMainBinding
 
@@ -55,7 +49,6 @@ private const val MENU_ENTRY_SETTINGS = 2
 private const val MENU_ENTRY_ABOUT = 3
 private const val MENU_ENTRY_DEVICE_FIRST_ID = 1000 //All subsequent ids are devices in the menu
 private const val MENU_ENTRY_DEVICE_UNKNOWN = 9999 //It's still a device, but we don't know which one yet
-private const val STORAGE_LOCATION_CONFIGURED = 2020
 private const val STATE_SELECTED_MENU_ENTRY = "selected_entry" //Saved only in onSaveInstanceState
 private const val STATE_SELECTED_DEVICE = "selected_device" //Saved persistently in preferences
 
@@ -63,6 +56,19 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
     private val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
     private val mNavigationView: NavigationView by lazy { binding.navigationDrawer }
     private var mDrawerLayout: DrawerLayout? = null
+
+    private val upfrontPermissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN && results[Manifest.permission.ACCESS_LOCAL_NETWORK] == true) {
+            BackgroundService.ForceRefreshConnections(this)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && results[Manifest.permission.POST_NOTIFICATIONS] == true) {
+            KdeConnect.getInstance().reloadAllDevicePlugins()
+        }
+        if (results.containsValue(true)) {
+            // If PairingFragment is active, update its permissions header
+            (currentFragment as? PairingFragment)?.updatePermissionsHeader()
+        }
+    }
 
     private lateinit var mNavViewDeviceName: TextView
 
@@ -146,7 +152,7 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
 
                 MENU_ENTRY_ABOUT -> {
                     preferences.edit { putString(STATE_SELECTED_DEVICE, null) }
-                    setContentFragment(AboutFragment.newInstance(getApplicationAboutData(this)))
+                    setContentFragment(AboutFragment.newInstance())
                 }
 
                 else -> {
@@ -163,19 +169,19 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
         var savedMenuEntry: Int
         when {
             intent.hasExtra(FLAG_FORCE_OVERVIEW) -> {
-                Log.i(this::class.simpleName, "Requested to start main overview")
+                Log.i(LOG_TAG, "Requested to start main overview")
                 savedDevice = null
                 savedMenuEntry = MENU_ENTRY_ADD_DEVICE
             }
 
             intent.hasExtra(EXTRA_DEVICE_ID) -> {
-                Log.i(this::class.simpleName, "Loading selected device from parameter")
+                Log.i(LOG_TAG, "Loading selected device from parameter")
                 savedDevice = intent.getStringExtra(EXTRA_DEVICE_ID)
                 savedMenuEntry = MENU_ENTRY_DEVICE_UNKNOWN
                 // If pairStatus is not empty, then the user has accepted/reject the pairing from the notification
                 val pairStatus = intent.getStringExtra(PAIR_REQUEST_STATUS)
                 if (pairStatus != null) {
-                    Log.i(this::class.simpleName, "Pair status is $pairStatus")
+                    Log.i(LOG_TAG, "Pair status is $pairStatus")
                     savedDevice = onPairResultFromNotification(savedDevice, pairStatus)
                     if (savedDevice == null) {
                         savedMenuEntry = MENU_ENTRY_ADD_DEVICE
@@ -184,13 +190,13 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
             }
 
             savedInstanceState != null -> {
-                Log.i(this::class.simpleName, "Loading selected device from saved activity state")
+                Log.i(LOG_TAG, "Loading selected device from saved activity state")
                 savedDevice = savedInstanceState.getString(STATE_SELECTED_DEVICE)
                 savedMenuEntry = savedInstanceState.getInt(STATE_SELECTED_MENU_ENTRY, MENU_ENTRY_ADD_DEVICE)
             }
 
             else -> {
-                Log.i(this::class.simpleName, "Loading selected device from persistent storage")
+                Log.i(LOG_TAG, "Loading selected device from persistent storage")
                 savedDevice = preferences.getString(STATE_SELECTED_DEVICE, null)
                 savedMenuEntry = if (savedDevice != null) MENU_ENTRY_DEVICE_UNKNOWN else MENU_ENTRY_ADD_DEVICE
             }
@@ -211,24 +217,30 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
         } else {
             when (mCurrentMenuEntry) {
                 MENU_ENTRY_SETTINGS -> setContentFragment(SettingsFragment())
-                MENU_ENTRY_ABOUT -> setContentFragment(AboutFragment.newInstance(getApplicationAboutData(this)))
+                MENU_ENTRY_ABOUT -> setContentFragment(AboutFragment.newInstance())
                 else -> setContentFragment(PairingFragment())
             }
         }
 
         val missingPermissions = mutableListOf<String>()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissionResult = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            if (permissionResult != PackageManager.PERMISSION_GRANTED) {
-                if (!ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
-                    missingPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
+        // Upfront requests for permissions without explanation
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) != PERMISSION_GRANTED
+            && !ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_LOCAL_NETWORK))
+        {
+            missingPermissions.add(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PERMISSION_GRANTED
+            && !ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS))
+        {
+            missingPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        if(missingPermissions.isNotEmpty()){
-            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), RESULT_NOTIFICATIONS_ENABLED)
+        // Check savedInstanceState to avoid requesting permissions again if the activity is recreated eg on rotation
+        if (missingPermissions.isNotEmpty() && savedInstanceState == null) {
+            upfrontPermissionsLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 
@@ -242,7 +254,7 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
         if (pairStatus != PAIRING_PENDING) {
             val device = KdeConnect.getInstance().getDevice(deviceId)
             if (device == null) {
-                Log.w(this::class.simpleName, "Reject pairing - device no longer exists: $deviceId")
+                Log.w(LOG_TAG, "Reject pairing - device no longer exists: $deviceId")
                 return null
             }
             when (pairStatus) {
@@ -306,7 +318,7 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
     override fun onStart() {
         super.onStart()
         BackgroundService.Start(applicationContext)
-        KdeConnect.getInstance().addDeviceListChangedCallback(this::class.simpleName!!) { runOnUiThread { updateDeviceList() } }
+        KdeConnect.getInstance().addDeviceListChangedCallback("MainActivity") { runOnUiThread { updateDeviceList() } }
         updateDeviceList()
         onBackPressedDispatcher.addCallback(mainFragmentCallback)
         onBackPressedDispatcher.addCallback(closeDrawerCallback)
@@ -314,17 +326,16 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
     }
 
     override fun onStop() {
-        KdeConnect.getInstance().removeDeviceListChangedCallback(this::class.simpleName!!)
+        KdeConnect.getInstance().removeDeviceListChangedCallback("MainActivity")
         mainFragmentCallback.remove()
         closeDrawerCallback.remove()
         super.onStop()
     }
 
-    @JvmOverloads
     fun onDeviceSelected(deviceId: String?, fromDeviceList: Boolean = false) {
         mCurrentDevice = deviceId
         preferences.edit { putString(STATE_SELECTED_DEVICE, deviceId) }
-        if (mCurrentDevice != null) {
+        if (deviceId != null) {
             mCurrentMenuEntry = deviceIdToMenuEntryId(deviceId)
             if (mCurrentMenuEntry == MENU_ENTRY_DEVICE_UNKNOWN) {
                 uncheckAllMenuItems(mNavigationView.menu)
@@ -339,6 +350,9 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
         }
     }
 
+    private val currentFragment: Fragment?
+        get() = supportFragmentManager.findFragmentById(R.id.container)
+
     private fun setContentFragment(fragment: Fragment) {
         supportFragmentManager
             .beginTransaction()
@@ -350,60 +364,6 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_SELECTED_DEVICE, mCurrentDevice)
         outState.putInt(STATE_SELECTED_MENU_ENTRY, mCurrentMenuEntry)
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when {
-            requestCode == RESULT_NEEDS_RELOAD -> {
-                CoroutineScope(Dispatchers.IO).launch {
-                    KdeConnect.getInstance().devices.values.forEach(Device::reloadPluginsFromSettings)
-                }
-            }
-            requestCode == STORAGE_LOCATION_CONFIGURED && resultCode == RESULT_OK && data != null -> {
-                val uri = data.data
-                ShareSettingsFragment.saveStorageLocationPreference(this, uri)
-            }
-            else -> super.onActivityResult(requestCode, resultCode, data)
-        }
-    }
-
-    fun isPermissionGranted(permissions: Array<String>, grantResults: IntArray, permission : String) : Boolean {
-        val index = ArrayUtils.indexOf(permissions, permission)
-        return index != ArrayUtils.INDEX_NOT_FOUND && grantResults[index] == PackageManager.PERMISSION_GRANTED
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        val permissionsGranted = ArrayUtils.contains(grantResults, PackageManager.PERMISSION_GRANTED)
-        if (permissionsGranted) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isPermissionGranted(permissions, grantResults, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                // To get a writeable path manually on Android 10 and later for Share and Receive Plugin.
-                // Otherwise, Receiving files will keep failing until the user chooses a path manually to receive files.
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                startActivityForResult(intent, STORAGE_LOCATION_CONFIGURED)
-            }
-
-            if (isPermissionGranted(permissions, grantResults, Manifest.permission.BLUETOOTH_CONNECT) &&
-                isPermissionGranted(permissions, grantResults, Manifest.permission.BLUETOOTH_SCAN)) {
-                PreferenceManager.getDefaultSharedPreferences(this).edit {
-                    putBoolean(SettingsFragment.KEY_BLUETOOTH_ENABLED, true)
-                }
-                setContentFragment(SettingsFragment())
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && isPermissionGranted(permissions, grantResults, Manifest.permission.POST_NOTIFICATIONS)) {
-                // If PairingFragment is active, reload it
-                if (mCurrentDevice == null) {
-                    setContentFragment(PairingFragment())
-                }
-            }
-
-            //New permission granted, reload plugins
-            CoroutineScope(Dispatchers.IO).launch {
-                KdeConnect.getInstance().devices.values.forEach(Device::reloadPluginsFromSettings)
-            }
-        }
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
@@ -422,13 +382,13 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
     }
 
     companion object {
+        const val LOG_TAG = "MainActivity"
+
         const val EXTRA_DEVICE_ID = "deviceId"
         const val PAIR_REQUEST_STATUS = "pair_req_status"
         const val PAIRING_ACCEPTED = "accepted"
         const val PAIRING_REJECTED = "rejected"
         const val PAIRING_PENDING = "pending"
-        const val RESULT_NEEDS_RELOAD = RESULT_FIRST_USER
-        const val RESULT_NOTIFICATIONS_ENABLED = RESULT_FIRST_USER+1
         const val FLAG_FORCE_OVERVIEW = "forceOverview"
     }
 

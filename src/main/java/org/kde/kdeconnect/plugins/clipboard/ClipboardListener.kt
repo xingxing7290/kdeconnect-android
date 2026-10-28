@@ -3,17 +3,17 @@
  * SPDX-FileCopyrightText: 2021 Ilmaz Gumerov <ilmaz1309@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins.clipboard
 
-import android.Manifest
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import org.kde.kdeconnect.helpers.ThreadHelper.execute
 import org.kde.kdeconnect_tp.BuildConfig
 import java.io.BufferedReader
@@ -23,14 +23,21 @@ import java.util.Date
 import java.util.Locale
 
 class ClipboardListener {
+    enum class ClipboardContentType {
+        Text,
+        Password,
+    }
+
     interface ClipboardObserver {
-        fun clipboardChanged(content: String)
+        fun clipboardChanged(content: String, contentType: ClipboardContentType)
     }
 
     private val observers: HashSet<ClipboardObserver> = HashSet()
 
     private val context: Context
     var currentContent: String? = null
+        private set
+    var currentContentType: ClipboardContentType = ClipboardContentType.Text
         private set
     var updateTimestamp: Long = 0
         private set
@@ -40,7 +47,7 @@ class ClipboardListener {
     private constructor(ctx: Context) {
         context = ctx.applicationContext
         Handler(Looper.getMainLooper()).post {
-            cm = ContextCompat.getSystemService<ClipboardManager>(context, ClipboardManager::class.java)!!
+            cm = context.getSystemService<ClipboardManager>()!!
             cm.addPrimaryClipChangedListener { this.onClipboardChanged() }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ClipboardPlugin.canSyncAutomatically(context)) {
@@ -71,39 +78,56 @@ class ClipboardListener {
 
     fun onClipboardChanged() {
         try {
-            val item = cm.primaryClip!!.getItemAt(0)
+            val clip = cm.primaryClip!!
+            val item = clip.getItemAt(0)
             val content = item.coerceToText(context).toString()
+            val contentType = detectContentType(clip)
 
-            if (content == currentContent) {
+            if (content == currentContent && contentType == currentContentType) {
                 return
             }
             updateTimestamp = System.currentTimeMillis()
             currentContent = content
+            currentContentType = contentType
 
             for (observer in observers) {
-                observer.clipboardChanged(content)
+                observer.clipboardChanged(content, contentType)
             }
         } catch (_: Exception) {
             //Probably clipboard was not text
         }
     }
 
-    @Suppress("deprecation")
     fun setText(text: String?) {
         if (this::cm.isInitialized) {
+            if (text == currentContent) {
+                return
+            }
             updateTimestamp = System.currentTimeMillis()
             currentContent = text
-            cm.text = text
+            currentContentType = ClipboardContentType.Text
+            cm.setPrimaryClip(ClipData.newPlainText(null, text))
         }
     }
 
     companion object {
         private var _instance: ClipboardListener? = null
 
-        @JvmStatic
         fun instance(context: Context): ClipboardListener {
             // FIXME: The _instance we return won't be completely initialized yet since initialization happens on a new thread (why?)
             return _instance ?: ClipboardListener(context).also { _instance = it }
+        }
+
+        fun detectContentType(clip: ClipData?): ClipboardContentType {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                return ClipboardContentType.Text
+            }
+            if (clip?.description?.extras
+                    ?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) == true
+            ) {
+                return ClipboardContentType.Password
+            }
+            return ClipboardContentType.Text
         }
     }
 }

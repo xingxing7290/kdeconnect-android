@@ -18,12 +18,15 @@
   <string name="pref_plugin_clipboard">Uskladi odložišči</string>
   <string name="pref_plugin_clipboard_desc">Deli skupno vsebino odložišča</string>
   <string name="pref_plugin_clipboard_sent">Odložišče je poslano</string>
+  <string name="clipboard_preference_title_skip_sensitive">Preskoči občutljivo sinhronizacijo odložišča</string>
+  <string name="clipboard_preference_summary_skip_sensitive">Samodejno ne sinhroniziraj gesel ali druge vsebine označene kot občutljive</string>
   <string name="pref_plugin_mousepad">Oddaljeni vhod</string>
   <string name="pref_plugin_mousepad_desc_nontv">Uporabi telefon ali tablični računalnik kot sledilno ploščico in tipkovnico</string>
   <string name="pref_plugin_mousepad_desc_tv">Uporabi telefon ali tablični računalnik kot oddaljeni TV</string>
   <string name="pref_plugin_presenter">Oddaljena predstavitev</string>
   <string name="pref_plugin_presenter_desc">S svojo napravo lahko menjate slike v predstavitvi</string>
-  <string name="pref_plugin_remotekeyboard">Sprejem oddaljenih pritiskov tipk</string>
+  <string name="pref_plugin_remotekeyboard_ime">Tipkovnica sprejemnika (prek tipkovnice Android)</string>
+  <string name="pref_plugin_remotekeyboard_accessibility">Tipkovnica sprejemnika (prek dostopnosti)</string>
   <string name="pref_plugin_remotekeyboard_desc">Prejemanje dogodkov tipk od oddaljenih naprav</string>
   <string name="pref_plugin_mpris">Upravljanje večpredstavnosti</string>
   <string name="pref_plugin_mpris_desc">Omogoča daljinski upravljalnik za predvajalnik medijev</string>
@@ -46,9 +49,12 @@
   <string name="sad_ok">V redu :(</string>
   <string name="cancel">Prekliči</string>
   <string name="open_settings">Odpri nastavitve</string>
+  <string name="open_accessibility_settings">Odpri nastavitve dostopnosti</string>
+  <string name="open_input_settings">Odpri nastavitve tipkovnice</string>
   <string name="no_permissions">Za dostop do obvestil morate odobriti dovoljenje</string>
   <string name="no_permission_mprisreceiver">Če želite upravljati svoje predvajalnike medijev, morate odobriti dostop do obvestil</string>
-  <string name="no_permissions_remotekeyboard">Za sprejem pritiskov tipk morate aktivirati oddaljeno tipkovnico KDE Connect</string>
+  <string name="no_permissions_remotekeyboard_ime">Za prejemanje pritiskov tipk morate aktivirati oddaljeno tipkovnico KDE Connect kot način vnosa za Android</string>
+  <string name="no_permissions_remotekeyboard_accessibility">Za prejemanje pritiskov tipk morate odobriti dovoljenja za dostopnost</string>
   <string name="send_ping">Pošlji ping</string>
   <string name="open_mpris_controls">Upravljanje večpredstavnosti</string>
   <string name="remotekeyboard_editing_only_title">Oddaljene tipke uporabljajte samo med urejanjem</string>
@@ -58,6 +64,7 @@
   <string name="open_mousepad">Oddaljeni input</string>
   <string name="open_mousepad_tv">TV daljinec</string>
   <string name="mousepad_info">Premaknite prst po zaslonu da bi premikali miško. Tapnite za klik in uporabite dva/tri prste za desni in srednji gumb. Za pomikanje uporabite dva prsta. Uporabite dolg pritisk za povleci in spusti. Žiroskopsko zmožnost miške lahko omogočite iz nastavitve vtičnika</string>
+  <string name="mousepad_info_double_tap">Premaknite prst po zaslonu da bi premikali miško. Dotaknite za klik in uporabite dva/tri prste za desni in srednji gumb. Za pomikanje uporabite dva prsta. Dvakratni dotik za povleci in spusti. Žiroskopsko zmožnost miške lahko omogočite iz nastavitve vtičnika</string>
   <string name="mousepad_info_no_gestures">Premaknite prst po zaslonu, da premaknete kazalec miške, tapnite za klik.</string>
   <string name="mousepad_keyboard_input_not_supported">Vnos s tipkovnice ni podprt na sparjeni napravi</string>
   <string name="mousepad_single_tap_settings_title">Nastavite akcijo tapkanja enega prsta</string>
@@ -73,6 +80,7 @@
   <string name="bigscreen_hide_mouse_input">Skrij gumb za vnos z miško in tipkovnico na daljinskem upravljalniku</string>
   <string name="bigscreen_show_home_title">Prikaži gumb Domov</string>
   <string name="bigscreen_show_back_title">Prikaži gumb Nazaj</string>
+  <string name="bigscreen_show_close_title">Prikaži gumb Zapri</string>
   <string-array name="mousepad_tap_entries">
     <item>Levi klik</item>
     <item>Desni klik</item>
@@ -108,7 +116,8 @@
   <string name="pref_plugin_mousepad_send_keystrokes">Pošlji kot pritiske tipk</string>
   <string name="mouse_receiver_plugin_description">Sprejemaj gibanje oddaljene miške</string>
   <string name="mouse_receiver_plugin_name">Sprejemnik miške</string>
-  <string name="mouse_receiver_no_permissions">Če želite prejemati vnose dotikov na daljavo, morate podeliti dovoljenja za dostopnost za popoln nadzor vaše naprave</string>
+  <string name="mouse_receiver_no_permissions">Če želite prejemati vnose na dotik na daljavo, morate podeliti dovoljenja za dostopnost</string>
+  <string name="mouse_keyboard_receiver_service_description">Sprejemaj oddaljene premike miške in vnose s tipkovnice</string>
   <string name="view_status_title">Stanje</string>
   <string name="battery_status_format">Baterija: %d%%</string>
   <string name="battery_status_low_format">Baterija: %d%% skoraj prazna</string>
@@ -141,10 +150,10 @@
     <item quantity="other">Prejemanje %1$d datotek od %2$s</item>
   </plurals>
   <plurals name="incoming_files_text">
-    <item quantity="one">(Datoteke %2$d od %3$d) : %1$s</item>
+    <item quantity="one">(Datoteka %2$d od %3$d) : %1$s</item>
     <item quantity="two">(Datoteka %2$d od %3$d) : %1$s</item>
-    <item quantity="few">(Datoteki %2$d od %3$d) : %1$s</item>
-    <item quantity="other">(Datoteke %2$d od %3$d) : %1$s</item>
+    <item quantity="few">(Datoteka %2$d od %3$d) : %1$s</item>
+    <item quantity="other">(Datoteka %2$d od %3$d) : %1$s</item>
   </plurals>
   <plurals name="outgoing_file_title">
     <item quantity="one">Pošiljanje %1$d datotek na %2$s</item>
@@ -192,6 +201,7 @@
   <string name="show_keyboard">Pokaži tipkovnico</string>
   <string name="show_mouse_and_keyboard">Pokaži muško in tipkovnico</string>
   <string name="device_not_paired">Naprava ni uparjena</string>
+  <string name="pairing_missing_local_network_permission">Manjkajoče dovoljenje za dostop do bližnjih naprav, aplikacija ne bo delovala.</string>
   <string name="pairing_duplicate_names">POZOR: Obstaja več naprav z istim imenom.</string>
   <string name="request_pairing">Zahtevaj uparjanje</string>
   <string name="pairing_accept">Sprejmi</string>
@@ -222,6 +232,7 @@
   <string name="share_to">Deli z…</string>
   <string name="unreachable_device_dynamic_shortcut">%s (✕)</string>
   <string name="unreachable_device_url_share_text">URL-ji, ki so v skupni rabi z nedosegljivo napravo, ji bodo dostavljeni, ko postane dosegljiva.\n\n</string>
+  <string name="unreachable_share_toast">URL bo posredovan naslednjič, ko bo naprava povezana.</string>
   <string name="protocol_version">Protokol različice:</string>
   <string name="protocol_version_newer">Ta naprava uporablja novejšo različico protokola</string>
   <string name="plugin_settings_with_name">Nastavitve %s</string>
@@ -242,7 +253,6 @@
   <string name="share_destination_folder_preference">Ciljni imenik</string>
   <string name="share">Deli</string>
   <string name="share_received_file">Deli \"%s\"</string>
-  <string name="title_activity_notification_filter">Filter obvestil</string>
   <string name="filter_apps_info">Obvestila bodo usklajena za izbrane aplikacije.</string>
   <string name="show_notification_if_screen_off">Pošlji obvestila le, če je zaslon izključen</string>
   <string name="add_device_dialog_title">Dodaj napravo</string>
@@ -261,6 +271,7 @@
   <string name="sftp_saf_permission_explanation">Za dostop do datotek na daljavo morate nastaviti lokacije za shranjevanje</string>
   <string name="sftp_manage_storage_permission_explanation">Da bi dovolili oddaljeni dostop do datotek na tej napravi, morate dovoliti, da KDE Connect upravlja s hrambo.</string>
   <string name="sftp_missing_permission_error">Manjkajoča dovoljenja: dostop do datotečnega sistema</string>
+  <string name="sftp_could_not_determine_ip">Ni bilo mogoče določiti lokalnega IP naslova</string>
   <string name="no_players_connected">Ni najdenih predvajalnikov</string>
   <string name="send_files">Pošlji datoteke</string>
   <string name="use_digitizer">Uporabi kot risalno tablico</string>
@@ -312,7 +323,7 @@
   <string name="contacts_per_device_confirmation">Vaši telefonski stiki bodo prekopirani na to napravo, da jih lahko uporablja KDE Connect SMS in druge aplikacije.</string>
   <string name="select_ringtone">Izberite melodijo zvonjenja</string>
   <string name="telephony_pref_blocked_title">Blokirane številke</string>
-  <string name="telephony_pref_blocked_dialog_desc">Ne prikazuj klicev in SMS s teh številk. Navedite po eno telefonsko številko v vsaki vrsti</string>
+  <string name="telephony_pref_blocked_dialog_desc">Ne prikazuj klicev s teh številk. Navedite po eno številko na vrstico</string>
   <string name="mpris_coverart_description">Naslovnica trenutnega medija</string>
   <string name="settings_icon_description">Ikona nastavitev</string>
   <string name="presenter_fullscreen">Polni zaslon</string>
@@ -339,6 +350,7 @@
   <string name="runcommand_notpaired">Naprava ni uparjena</string>
   <string name="runcommand_nosuchdevice">Ni take naprave</string>
   <string name="runcommand_noruncommandplugin">Ta naprava nima omogočenega vtičnika za zagonski ukaz</string>
+  <string name="runcommand_widget_no_device">Kliknite na naslov, da izberete napravo.</string>
   <string name="runcommand_category_device_controls_title">Nadzor naprave</string>
   <string name="runcommand_device_controls_summary">Če vaša naprava podpira nadzor naprave, se tam prikažejo ukazi, ki ste jih konfigurirali.</string>
   <string name="set_runcommand_name_as_title">nastavi_ukaz_ime_kot_naslov</string>
@@ -382,6 +394,7 @@
   <string name="mpris_open_url">Nadaljuj s predvajanjem tukaj</string>
   <string name="cant_open_url">Ne morem odpreti spletnega naslova za nadaljevanje predvajanja</string>
   <string name="bigscreen_home">Domov</string>
+  <string name="bigscreen_close">Zapri</string>
   <string name="bigscreen_up">Gor</string>
   <string name="bigscreen_left">Levo</string>
   <string name="bigscreen_select">Izberi</string>
@@ -484,4 +497,10 @@
   <string name="pref_presenter_enable_volume_keys_summary">V stanju pripravljenosti ni podprto v različicah Androida med 13 in 15</string>
   <string name="presenter_volume_keys_foreground_tip">Zaslon lahko pustite vklopljen, če želite s tipkama za glasnost preskočiti na prejšnjo/naslednjo sliko</string>
   <string name="presenter_volume_keys_tip">Zaslon lahko pustite vklopljen ali zaklenete napravo, da se s tipkama za glasnost premaknete na prejšnjo/naslednjo sliko</string>
+  <string name="runcommand_output_no_output_desc">Izhod ukazov se bo prikazal tukaj.</string>
+  <string name="runcommand_output_no_output">Ni izvedenih ukazov</string>
+  <string name="runcommand_stop">Ustavi trenutni ukaz</string>
+  <string name="runcommand_clear_output">Počisti izhod</string>
+  <string name="pref_mpris_volume_control_title">Fizične tipke za glasnost</string>
+  <string name="pref_mpris_volume_control_summary">Glasnost medijev v povezani napravi lahko upravljate s fizičnimi gumbi tega telefona</string>
 </resources>

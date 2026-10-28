@@ -18,12 +18,15 @@
   <string name="pref_plugin_clipboard">Synkroniser utklippstavle</string>
   <string name="pref_plugin_clipboard_desc">Del innhaldet på utklippstavla</string>
   <string name="pref_plugin_clipboard_sent">Utklippstavle send</string>
+  <string name="clipboard_preference_title_skip_sensitive">Ikkje synkroniser sensitivt innhald</string>
+  <string name="clipboard_preference_summary_skip_sensitive">Ikkje synkroniser passord og anna innhald merkt som sensitivt</string>
   <string name="pref_plugin_mousepad">Fjernstyring</string>
   <string name="pref_plugin_mousepad_desc_nontv">Bruk telefonen eller nettbrettet som styreplate og tastatur</string>
   <string name="pref_plugin_mousepad_desc_tv">Bruk telefonen eller nettbrettet som TV-fjernkontroll</string>
   <string name="pref_plugin_presenter">Fjernkontroll av presentasjon</string>
   <string name="pref_plugin_presenter_desc">Bruk eininga til å byta lysbilete i presentasjonar</string>
-  <string name="pref_plugin_remotekeyboard">Ta imot eksterne tastetrykk</string>
+  <string name="pref_plugin_remotekeyboard_ime">Tastatatur-mottakar (via Android-tastatur)</string>
+  <string name="pref_plugin_remotekeyboard_accessibility">Tastatatur-mottakar (via tilgjengelegheit)</string>
   <string name="pref_plugin_remotekeyboard_desc">Ta imot tastetrykk frå eksterne einingar</string>
   <string name="pref_plugin_mpris">Mediekontrollar</string>
   <string name="pref_plugin_mpris_desc">Gje fjernkontroll til mediespelarar</string>
@@ -46,9 +49,10 @@
   <string name="sad_ok">OK :(</string>
   <string name="cancel">Avbryt</string>
   <string name="open_settings">Opna innstillingar</string>
+  <string name="open_accessibility_settings">Opna tilgjengeinnstillingane</string>
+  <string name="open_input_settings">Opna tastaturinnstillingar</string>
   <string name="no_permissions">Du må gje tilgang til lesing av varslingar</string>
   <string name="no_permission_mprisreceiver">Du må gje tilgang til varslingar for å kunne kontrollera mediespelarar</string>
-  <string name="no_permissions_remotekeyboard">For å ta imot tastetrykk må du slå på fjerntastaturet i KDE Connect</string>
   <string name="send_ping">Send pingsignal</string>
   <string name="open_mpris_controls">Mediekontroll</string>
   <string name="remotekeyboard_editing_only_title">Handter eksterne tastetrykk berre ved redigering</string>
@@ -73,6 +77,7 @@
   <string name="bigscreen_hide_mouse_input">Gøym knapp for mus- og tastaturbruk på ekstern eining</string>
   <string name="bigscreen_show_home_title">Vis heim-knapp</string>
   <string name="bigscreen_show_back_title">Vis tilbake-knapp</string>
+  <string name="bigscreen_show_close_title">Vis lukkeknapp</string>
   <string-array name="mousepad_tap_entries">
     <item>Venstreklikk</item>
     <item>Høgreklikk</item>
@@ -108,7 +113,6 @@
   <string name="pref_plugin_mousepad_send_keystrokes">Send som tastetrykk</string>
   <string name="mouse_receiver_plugin_description">Ta imot eksterne muserørsler</string>
   <string name="mouse_receiver_plugin_name">Muserørsle-mottakar</string>
-  <string name="mouse_receiver_no_permissions">For å kunna ta imot trykk-data, må du gje tilgjenge­løyva for å styring av heile eininga</string>
   <string name="view_status_title">Status</string>
   <string name="battery_status_format">Batteri: %d %%</string>
   <string name="battery_status_low_format">Batteri: %d %% – lågt batterinivå</string>
@@ -176,6 +180,7 @@
   <string name="show_keyboard">Vis tastatur</string>
   <string name="show_mouse_and_keyboard">Vis mus og tastatur</string>
   <string name="device_not_paired">Eininga er ikkje para</string>
+  <string name="pairing_missing_local_network_permission">Manglar løyve for tilgang til einingar i nærleiken. Appen vil ikkje verka.</string>
   <string name="pairing_duplicate_names">Åtvaring: Det finst fleire einingar med same namn.</string>
   <string name="request_pairing">Be om paring</string>
   <string name="pairing_accept">Godta</string>
@@ -227,7 +232,6 @@
   <string name="share_destination_folder_preference">Målmappe</string>
   <string name="share">Del</string>
   <string name="share_received_file">Del «%s»</string>
-  <string name="title_activity_notification_filter">Varslingsfilter</string>
   <string name="filter_apps_info">Varslingar vert synkroniserte for dei valde appane.</string>
   <string name="show_notification_if_screen_off">Send berre varslingar dersom skjermen er av</string>
   <string name="add_device_dialog_title">Legg til eining</string>
@@ -297,7 +301,6 @@
   <string name="contacts_per_device_confirmation">Telefonkontaktane dine vert kopiert over til denne eininga, slik at dei kan brukast av KDE Connect SMS-appen og andre appar.</string>
   <string name="select_ringtone">Vel ringjetone</string>
   <string name="telephony_pref_blocked_title">Blokkerte nummer</string>
-  <string name="telephony_pref_blocked_dialog_desc">Ikkje vis oppringingar eller SMS-ar frå desse telefonnummera. Skriv inn eitt telefonnummer per linje.</string>
   <string name="mpris_coverart_description">Omslagsbilete til gjeldande mediefil</string>
   <string name="settings_icon_description">Innstillingsikon</string>
   <string name="presenter_fullscreen">Fullskjerm</string>
@@ -367,6 +370,7 @@
   <string name="mpris_open_url">Hald fram avspeling her</string>
   <string name="cant_open_url">Kan ikkje opna adressa for framhald av avspeling</string>
   <string name="bigscreen_home">Heim</string>
+  <string name="bigscreen_close">Lukk</string>
   <string name="bigscreen_up">Opp</string>
   <string name="bigscreen_left">Venstre</string>
   <string name="bigscreen_select">Vel</string>
@@ -453,6 +457,7 @@
   <string name="findmyphone_notifications_explanation">Varslingsløyvet trengst for at telefonen skal kunna ringja når appen er i bakgrunnsmodus</string>
   <string name="findmyphone_camera_explanation">Kameraløyvet gjer det mogleg å blinka med lommelykta for å finna telefonen</string>
   <string name="findmyphone_open_settings_for_camera">Gje kameraløyve i appinnstillingane for å kunna bruka lommelykta</string>
+  <string name="no_notifications">Varslingar er slåtte av, så du vil ikkje få varsling om parings­førespurnadar.</string>
   <string name="mpris_keepwatching">Hald fram avspeling</string>
   <string name="mpris_keepwatching_settings_title">Hald fram avspeling</string>
   <string name="mpris_keepwatching_settings_summary">Vis ei stille varsling om framhald av medie­avspeling på eininga etter avspelingsstopp</string>
@@ -462,9 +467,15 @@
   <string name="ping_in_progress">Pingar …</string>
   <string name="device_host_invalid">Ugyldig vert. Bruk eit gyldig vertsnamn, IPv4 eller IPv6.</string>
   <string name="device_host_duplicate">Verten finst i lista frå før</string>
+  <string name="enable_fullscreen">Bruk fullskjerm</string>
   <string name="pref_presenter_enable_volume_keys_title">Bruk lydstyrke-knappane for å byta lysbilete</string>
   <string name="pref_presenter_sensitivity_title">Peikarfølsemd</string>
   <string name="pref_presenter_enable_volume_keys_summary">Bruk i standby-modus er ikkje støtta på Android versjon 13–15</string>
   <string name="presenter_volume_keys_foreground_tip">Du kan la skjermen stå på for å bruka lydstyrke-knappane som førre/neste-knappar</string>
   <string name="presenter_volume_keys_tip">Du kan la skjermen stå på eller låsa eininga og bruka lydstyrke-knappane som førre/neste-knappar</string>
+  <string name="runcommand_output_no_output_desc">Utdata frå kommandoane vert viste her.</string>
+  <string name="runcommand_output_no_output">Ingen kommandoar vart køyrde</string>
+  <string name="runcommand_stop">Stopp gjeldande kommando</string>
+  <string name="pref_mpris_volume_control_title">Fysiske lydstyrke-knappar</string>
+  <string name="pref_mpris_volume_control_summary">Styr lydstyrken til den tilkopla eininga via dei fysiske lydstyrke-knappane på telefonen</string>
 </resources>

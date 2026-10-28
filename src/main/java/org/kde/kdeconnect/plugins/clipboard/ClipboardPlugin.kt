@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2014 Albert Vaca Cintora <albertvaka@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins.clipboard
 
 import android.Manifest
@@ -15,10 +15,12 @@ import android.os.Build
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.plugins.clipboard.ClipboardListener.ClipboardObserver
+import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect_tp.R
 
 @LoadablePlugin
@@ -28,6 +30,14 @@ class ClipboardPlugin : Plugin() {
 
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_clipboard_desc)
+
+    override fun hasSettings(): Boolean = true
+
+    override val settingsScope = SettingsScope.PER_DEVICE
+
+    override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
+        return PluginSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.clipboardplugin_preferences)
+    }
 
     override fun onPacketReceived(np: NetworkPacket): Boolean {
         val content = np.getString("content")
@@ -47,13 +57,21 @@ class ClipboardPlugin : Plugin() {
                 }
                 return true
             }
-            else -> throw UnsupportedOperationException("Unknown packet type: " + np.type)
+            else -> throw UnsupportedOperationException("Unknown packet type: ${np.type}")
         }
     }
 
     private val observer: ClipboardObserver = object : ClipboardObserver {
-        override fun clipboardChanged(content: String) {
-            return this@ClipboardPlugin.propagateClipboard(content)
+        override fun clipboardChanged(content: String, contentType: ClipboardListener.ClipboardContentType) {
+            if (contentType == ClipboardListener.ClipboardContentType.Password &&
+                preferences.getBoolean(
+                    context.getString(R.string.clipboard_preference_key_skip_sensitive),
+                    false,
+                )
+            ) {
+                return
+            }
+            propagateClipboard(content)
         }
     }
 
@@ -66,6 +84,14 @@ class ClipboardPlugin : Plugin() {
 
     private fun sendConnectPacket() {
         val content = ClipboardListener.instance(context).currentContent ?: return // Send clipboard only if it had been initialized
+        if (ClipboardListener.instance(context).currentContentType == ClipboardListener.ClipboardContentType.Password &&
+            preferences.getBoolean(
+                context.getString(R.string.clipboard_preference_key_skip_sensitive),
+                false,
+            )
+        ) {
+            return
+        }
         val np = NetworkPacket(PACKET_TYPE_CLIPBOARD_CONNECT)
         val timestamp = ClipboardListener.instance(context).updateTimestamp
         np["timestamp"] = timestamp
@@ -74,10 +100,9 @@ class ClipboardPlugin : Plugin() {
     }
 
 
-    override fun onCreate(): Boolean {
+    override fun onCreate() {
         ClipboardListener.instance(context).registerObserver(observer)
         sendConnectPacket()
-        return true
     }
 
     override fun onDestroy() {
@@ -111,11 +136,12 @@ class ClipboardPlugin : Plugin() {
 
     private fun userInitiatedSendClipboard() {
         if (isDeviceInitialized) {
-            val clipboardManager = ContextCompat.getSystemService<ClipboardManager>(this.context, ClipboardManager::class.java)
+            val clipboardManager = context.getSystemService<ClipboardManager>()!!
             val item: ClipData.Item
-            if (clipboardManager!!.hasPrimaryClip()) {
+            if (clipboardManager.hasPrimaryClip()) {
                 item = clipboardManager.primaryClip!!.getItemAt(0)
                 val content = item.coerceToText(this.context).toString()
+                // Don't check if the content is sensitive, just send it
                 this.propagateClipboard(content)
                 Toast.makeText(this.context, R.string.pref_plugin_clipboard_sent, Toast.LENGTH_SHORT).show()
             }
@@ -125,8 +151,8 @@ class ClipboardPlugin : Plugin() {
     companion object {
         /**
          * Packet containing just clipboard contents, sent when a device updates its clipboard.
-         * 
-         * 
+         *
+         *
          * The body should look like so:
          * {
          * "content": "password"
@@ -137,12 +163,12 @@ class ClipboardPlugin : Plugin() {
         /**
          * Packet containing clipboard contents and a timestamp that the contents were last updated, sent
          * on first connection
-         * 
-         * 
+         *
+         *
          * The timestamp is milliseconds since epoch. It can be 0, which indicates that the clipboard
          * update time is currently unknown.
-         * 
-         * 
+         *
+         *
          * The body should look like so:
          * {
          * "timestamp": 542904563213,

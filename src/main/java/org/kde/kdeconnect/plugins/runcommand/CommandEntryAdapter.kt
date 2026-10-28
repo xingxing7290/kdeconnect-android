@@ -23,7 +23,8 @@ import java.util.concurrent.Executors
 
 class CommandEntryAdapter(
     private val commands: MutableList<CommandEntry>,
-    private val onItemClick: (CommandEntry) -> kotlin.Unit
+    private val onItemClick: (CommandEntry) -> kotlin.Unit,
+    private val onMoreClick: (CommandEntry) -> kotlin.Unit,
 ) : RecyclerView.Adapter<CommandEntryAdapter.CommandViewHolder>() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -32,6 +33,7 @@ class CommandEntryAdapter(
         val commandName: TextView = view.findViewById(R.id.command_name)
         val commandBadge: TextView = view.findViewById(R.id.command_badge)
         val commandFavicon: ImageView = view.findViewById(R.id.command_favicon)
+        val commandMore: TextView = view.findViewById(R.id.command_more)
         
         init {
             // 使卡片保持正方形
@@ -63,6 +65,9 @@ class CommandEntryAdapter(
             
             holder.itemView.setOnClickListener {
                 onItemClick.invoke(command)
+            }
+            holder.commandMore.setOnClickListener {
+                onMoreClick.invoke(command)
             }
         } catch (e: Exception) {
             Log.e("CommandEntryAdapter", "绑定命令时出错", e)
@@ -211,6 +216,16 @@ class CommandEntryAdapter(
     override fun getItemCount() = commands.size
 
     fun setCommands(newCommands: List<CommandEntry>) {
+        val unchanged = commands.size == newCommands.size &&
+            commands.indices.all { index ->
+                val current = commands[index]
+                val replacement = newCommands[index]
+                current.key == replacement.key &&
+                    current.name == replacement.name &&
+                    current.command == replacement.command
+            }
+        if (unchanged) return
+
         commands.clear()
         commands.addAll(newCommands)
         notifyDataSetChanged()

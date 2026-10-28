@@ -6,16 +6,42 @@
 
 package org.kde.kdeconnect.ui.compose.screen.about
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import org.kde.kdeconnect.extensions.safeDrawingBottomPadding
 import org.kde.kdeconnect.ui.about.AboutData
 import org.kde.kdeconnect.ui.about.AboutPerson
+import org.kde.kdeconnect.ui.about.applicationAboutData
 import org.kde.kdeconnect.ui.compose.KdeTheme
 import org.kde.kdeconnect.ui.compose.components.KdeThemePreviews
 import org.kde.kdeconnect_tp.R
@@ -85,11 +112,16 @@ private fun AppInfoCard(
 ) {
     var tapCount by remember { mutableIntStateOf(0) }
     var firstTapMillis by remember { mutableStateOf<Long?>(null) }
+    val context = LocalContext.current
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = {
-            val currentMillis = System.currentTimeMillis()
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Version", aboutData.versionName))
+            Toast.makeText(context, R.string.clipboard_toast, Toast.LENGTH_SHORT).show()
+
+            val currentMillis = SystemClock.elapsedRealtime()
             if (firstTapMillis == null) {
                 firstTapMillis = currentMillis
             }
@@ -124,7 +156,7 @@ private fun AppInfoCard(
                 modifier = Modifier.align(Alignment.CenterVertically)
             ) {
                 Text(
-                    text = aboutData.name,
+                    text = stringResource(aboutData.name),
                     style = MaterialTheme.typography.titleLarge
                 )
                 Text(
@@ -313,20 +345,7 @@ private fun AuthorItemRow(author: AboutPerson) {
 @KdeThemePreviews
 @Composable
 private fun AboutScreenPreview() {
-    val sampleAboutData = AboutData(
-        name = "KDE Connect",
-        icon = R.drawable.icon,
-        versionName = "1.27.0",
-        bugURL = "https://bugs.kde.org",
-        websiteURL = "https://kdeconnect.kde.org",
-        sourceCodeURL = "https://invent.kde.org/network/kdeconnect-android",
-        donateURL = "https://www.kde.org/community/donations",
-        authorsFooterText = R.string.everyone_else
-    ).apply {
-        authors += AboutPerson("Albert Vaca Cintora", R.string.maintainer_and_developer)
-        authors += AboutPerson("Aleix Pol", R.string.developer)
-    }
-
+    val sampleAboutData = applicationAboutData
     KdeTheme(context = LocalContext.current) {
         Surface {
             AboutScreen(

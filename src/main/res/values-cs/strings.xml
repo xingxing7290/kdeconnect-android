@@ -18,12 +18,15 @@
   <string name="pref_plugin_clipboard">Synchronizace schránky</string>
   <string name="pref_plugin_clipboard_desc">Sdílet obsah schránky</string>
   <string name="pref_plugin_clipboard_sent">Schránka poslána</string>
+  <string name="clipboard_preference_title_skip_sensitive">Přeskočit citlivé položky při synchronizaci schránky</string>
+  <string name="clipboard_preference_summary_skip_sensitive">Nesynchronizovat automaticky hesla ani jiný obsah označený jako citlivý</string>
   <string name="pref_plugin_mousepad">Vzdálený vstup</string>
   <string name="pref_plugin_mousepad_desc_nontv">Používejte svůj telefon nebo tablet jako touchpad a klávesnici</string>
   <string name="pref_plugin_mousepad_desc_tv">Používejte svůj telefon nebo tablet jako ovladač TV</string>
   <string name="pref_plugin_presenter">Ovladač prezentace</string>
   <string name="pref_plugin_presenter_desc">Použijte své zařízení pro přepínání snímků prezentace</string>
-  <string name="pref_plugin_remotekeyboard">Přijímat stisky kláves ze vzdálených zařízení</string>
+  <string name="pref_plugin_remotekeyboard_ime">Přijímač klávesnice (přes klávesnici systému Android)</string>
+  <string name="pref_plugin_remotekeyboard_accessibility">Přijímač klávesnice (přes funkci usnadnění přístupu)</string>
   <string name="pref_plugin_remotekeyboard_desc">Přijímat události stisku kláves ze vzdálených zařízení</string>
   <string name="pref_plugin_mpris">Ovládání multimédií</string>
   <string name="pref_plugin_mpris_desc">Poskytuje dálkové ovládání přehrávačů médií</string>
@@ -46,9 +49,12 @@
   <string name="sad_ok">OK :(</string>
   <string name="cancel">Zrušit</string>
   <string name="open_settings">Otevřít nastavení</string>
+  <string name="open_accessibility_settings">Otevřít nastavení přístupnosti</string>
+  <string name="open_input_settings">Otevřít nastavení klávesnice</string>
   <string name="no_permissions">Pro zpřístupnění oznámení potřebujete oprávnění</string>
   <string name="no_permission_mprisreceiver">Abyste byli schopni ovládat vaše přehrávače médií, musíte udělit přístup k oznámením</string>
-  <string name="no_permissions_remotekeyboard">Pro zachytávání stisků kláves je potřeba aktivovat vzdálenou klávesnici KDE Connect</string>
+  <string name="no_permissions_remotekeyboard_ime">Chcete-li přijímat stisky kláves, musíte aktivovat funkci vzdálené klávesnice KDE Connect jako způsob zadávání v systému Android.</string>
+  <string name="no_permissions_remotekeyboard_accessibility">Chcete-li přijímat stisky kláves, musíte udělit oprávnění pro usnadnění přístupu</string>
   <string name="send_ping">Poslat ping</string>
   <string name="open_mpris_controls">Ovládání multimédií</string>
   <string name="remotekeyboard_editing_only_title">Ovládat vzdálené klávesy při editaci</string>
@@ -58,6 +64,7 @@
   <string name="open_mousepad">Vzdálený vstup</string>
   <string name="open_mousepad_tv">Ovladač TV</string>
   <string name="mousepad_info">Pohybujte prstem po obrazovce pro pohybování kurzorem myši. Ťukněte pro kliknutí a použijte dva/tři prsty jako pravé a prostřední tlačítko. Použijte 2 prsty pro posunování. Pro přetažení dlouze podržte. Funkčnost gyro myš lze povolit v předvolbách modulu.</string>
+  <string name="mousepad_info_double_tap">Pohybem prstu po obrazovce můžete pohybovat kurzorem myši. Klepnutím provedete kliknutí a dvěma či třemi prsty ovládáte pravé a střední tlačítko. Pro posouvání použijte dva prsty. Dvojitým klepnutím provedete přetažení. Funkci gyroskopické myši lze zapnout v nastavení modulu.</string>
   <string name="mousepad_info_no_gestures">Pohybujte prstem po obrazovce pro pohybování kurzorem myši, ťukněte pro kliknutí.</string>
   <string name="mousepad_keyboard_input_not_supported">Vstup pomocí klávesnice není spárovaným zařízením podporován</string>
   <string name="mousepad_single_tap_settings_title">Nastavit činnost pro ťuknutí prstem</string>
@@ -73,6 +80,7 @@
   <string name="bigscreen_hide_mouse_input">Skrýt tlačítko vzdáleného vstupu myši a klávesnice</string>
   <string name="bigscreen_show_home_title">Zobrazit tlačítko Domů</string>
   <string name="bigscreen_show_back_title">Zobrazit tlačítko Zpět</string>
+  <string name="bigscreen_show_close_title">Zobrazit uzavírací tlačítko</string>
   <string-array name="mousepad_tap_entries">
     <item>Kliknutí levým tlačítkem myši</item>
     <item>Kliknutí pravým tlačítkem myši</item>
@@ -108,7 +116,8 @@
   <string name="pref_plugin_mousepad_send_keystrokes">Posílat jako úhozy kláves</string>
   <string name="mouse_receiver_plugin_description">Přijímat vzdálený pohyb myši</string>
   <string name="mouse_receiver_plugin_name">Příjemce myši</string>
-  <string name="mouse_receiver_no_permissions">Pro příjem dotykového vstupu musíte nejdřív udělit oprávnění přístupnosti aby zařízení šlo ovládat</string>
+  <string name="mouse_receiver_no_permissions">Chcete-li přijímat dotykové vstupy na dálku, musíte udělit oprávnění pro usnadnění přístupu</string>
+  <string name="mouse_keyboard_receiver_service_description">Přijímání pohybů myši a vstupů z klávesnice ze vzdáleného zařízení</string>
   <string name="view_status_title">Stav</string>
   <string name="battery_status_format">Baterie: %d%%</string>
   <string name="battery_status_low_format">Baterie: %d%% Téměř vybitá baterie</string>
@@ -192,6 +201,7 @@
   <string name="show_keyboard">Zobrazit klávesnici</string>
   <string name="show_mouse_and_keyboard">Zobrazit myš a klávesnici</string>
   <string name="device_not_paired">Zařízení není spárováno</string>
+  <string name="pairing_missing_local_network_permission">Bez oprávnění k přístupu k okolním zařízením nebude aplikace fungovat.</string>
   <string name="pairing_duplicate_names">"Upozorněné:  Nalezeno více zařízení se stejným názvem."</string>
   <string name="request_pairing">Vyžádat párování</string>
   <string name="pairing_accept">Přijmout</string>
@@ -243,7 +253,6 @@
   <string name="share_destination_folder_preference">Cílový adresář</string>
   <string name="share">Sdílet</string>
   <string name="share_received_file">Sdílet \"%s\"</string>
-  <string name="title_activity_notification_filter">Filtr oznámení</string>
   <string name="filter_apps_info">Oznámení vybraných aplikací bude synchronizováno.</string>
   <string name="show_notification_if_screen_off">Poslat upozornění pouze při uzamčené obrazovce</string>
   <string name="add_device_dialog_title">Přidat zařízení</string>
@@ -262,6 +271,7 @@
   <string name="sftp_saf_permission_explanation">Pro vzdálený přístup k souborům musíte nastavit umístění úložišť</string>
   <string name="sftp_manage_storage_permission_explanation">Pro umožnění vzdáleného přístupu k souborům na tomto zařízení musíte povolit aplikaci KDE Connect spravovat úložiště.</string>
   <string name="sftp_missing_permission_error">Chybí oprávnění: přístup k souborovému systému</string>
+  <string name="sftp_could_not_determine_ip">Nepodařilo se zjistit místní IP adresu</string>
   <string name="no_players_connected">Přehrávač nenalezen</string>
   <string name="send_files">Odeslat soubory</string>
   <string name="use_digitizer">Používat jako grafický tablet</string>
@@ -313,7 +323,7 @@
   <string name="contacts_per_device_confirmation">Kontakty vašeho zařízení budou zkopírovány do tohoto zařízení aby je bylo možné použít pro připojení aplikací pro SMS a dalších.</string>
   <string name="select_ringtone">Vybrat vyzváněcí tón</string>
   <string name="telephony_pref_blocked_title">Blokovaná čísla</string>
-  <string name="telephony_pref_blocked_dialog_desc">Nezobrazovat volání a SMS z těchto čísel. Prosím, zadejte pouze jedno slovo na řádek.</string>
+  <string name="telephony_pref_blocked_dialog_desc">Nezobrazovat hovory z těchto čísel. Uveďte prosím jedno číslo na řádek</string>
   <string name="mpris_coverart_description">Obal současného média</string>
   <string name="settings_icon_description">Ikona nastavení</string>
   <string name="presenter_fullscreen">Celá obrazovka</string>
@@ -340,6 +350,7 @@
   <string name="runcommand_notpaired">Zařízení není spárováno</string>
   <string name="runcommand_nosuchdevice">Není zde žádné takové zařízení</string>
   <string name="runcommand_noruncommandplugin">Toto zařízení nemá povolený modul pro spouštění příkazů</string>
+  <string name="runcommand_widget_no_device">Kliknutím na název vyberte zařízení.</string>
   <string name="runcommand_category_device_controls_title">Ovládání zařízení</string>
   <string name="runcommand_device_controls_summary">Pokud vaše zařízení podporuje Ovládání zařízení, zobrazí se zde příkazy, které jste nastavili.</string>
   <string name="set_runcommand_name_as_title">set_runcommand_name_as_title</string>
@@ -383,6 +394,7 @@
   <string name="mpris_open_url">Pokračovat v přehrávání zde</string>
   <string name="cant_open_url">Nelze otevřít URL pro pokračování v přehrávání</string>
   <string name="bigscreen_home">Domů</string>
+  <string name="bigscreen_close">Zavřít</string>
   <string name="bigscreen_up">Nahoru</string>
   <string name="bigscreen_left">Vlevo</string>
   <string name="bigscreen_select">Vybrat</string>
@@ -485,4 +497,10 @@
   <string name="pref_presenter_enable_volume_keys_summary">Ve standby není podporováno mezi verzemi Androidu 13 a 15</string>
   <string name="presenter_volume_keys_foreground_tip">Můžete nechat obrazovku zapnutou a použít klávesy pro ovládání hlasitosti pro posun na předchozí/další snímek</string>
   <string name="presenter_volume_keys_tip">Můžete nechat obrazovku zapnutou nebo zamknout zařízení a použít klávesy pro ovládání hlasitosti pro posun na předchozí/další snímek</string>
+  <string name="runcommand_output_no_output_desc">Zde se zobrazí výstup z příkazů.</string>
+  <string name="runcommand_output_no_output">Nebyly spuštěny žádné příkazy</string>
+  <string name="runcommand_stop">Zastavit aktuální příkaz</string>
+  <string name="runcommand_clear_output">Vyprázdnit výstup</string>
+  <string name="pref_mpris_volume_control_title">Hardwarová tlačítka hlasitosti</string>
+  <string name="pref_mpris_volume_control_summary">Pomocí hardwarových tlačítek tohoto telefonu můžete ovládat hlasitost přehrávání médií na připojeném zařízení</string>
 </resources>

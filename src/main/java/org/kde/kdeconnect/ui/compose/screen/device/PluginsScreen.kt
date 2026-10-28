@@ -9,8 +9,11 @@ package org.kde.kdeconnect.ui.compose.screen.device
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -28,8 +31,11 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.kde.kdeconnect.extensions.safeDrawingBottomPadding
 import org.kde.kdeconnect.plugins.Plugin
+import org.kde.kdeconnect.plugins.clipboard.ClipboardPlugin
 import org.kde.kdeconnect.plugins.mpris.MprisPlugin
+import org.kde.kdeconnect.plugins.ping.PingPlugin
 import org.kde.kdeconnect.plugins.presenter.PresenterPlugin
 import org.kde.kdeconnect.plugins.runcommand.RunCommandPlugin
 import org.kde.kdeconnect.ui.compose.KdeTheme
@@ -42,14 +48,16 @@ fun PluginsScreen(
     pluginsNeedPermissions: List<Plugin>,
     pluginsNeedOptionalPermissions: List<Plugin>,
     onButtonClick: (Plugin.PluginUiButton) -> Unit,
-    action: (plugin: Plugin) -> Unit
+    actionNeedPermissions: (plugin: Plugin) -> Unit,
+    actionNeedOptionalPermissions: (plugin: Plugin) -> Unit,
 ) {
     PluginsScreenContent(
         pluginsWithButtons = pluginsWithButtons,
         pluginsNeedPermissions = pluginsNeedPermissions,
         pluginsNeedOptionalPermissions = pluginsNeedOptionalPermissions,
         onButtonClick = onButtonClick,
-        action = action
+        actionNeedPermissions = actionNeedPermissions,
+        actionNeedOptionalPermissions = actionNeedOptionalPermissions,
     )
 }
 
@@ -59,10 +67,18 @@ private fun PluginsScreenContent(
     pluginsNeedPermissions: List<Plugin>,
     pluginsNeedOptionalPermissions: List<Plugin>,
     onButtonClick: (Plugin.PluginUiButton) -> Unit,
-    action: (plugin: Plugin) -> Unit
+    actionNeedPermissions: (plugin: Plugin) -> Unit,
+    actionNeedOptionalPermissions: (plugin: Plugin) -> Unit,
 ) {
-    Surface {
-        Column(modifier = Modifier.padding(top = 8.dp)) {
+    val bottomPadding = safeDrawingBottomPadding().calculateBottomPadding()
+
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(state = rememberScrollState())
+                .padding(top = 16.dp, bottom = bottomPadding)
+        ) {
             PluginActionsList(
                 buttons = pluginsWithButtons,
                 onButtonClick = onButtonClick
@@ -72,7 +88,7 @@ private fun PluginsScreenContent(
                 PluginsWithoutPermissions(
                     title = stringResource(id = R.string.plugins_need_permission),
                     plugins = pluginsNeedPermissions,
-                    action = action
+                    action = actionNeedPermissions,
                 )
                 Spacer(modifier = Modifier.padding(vertical = 2.dp))
             }
@@ -80,7 +96,7 @@ private fun PluginsScreenContent(
                 PluginsWithoutPermissions(
                     title = stringResource(id = R.string.plugins_need_optional_permission),
                     plugins = pluginsNeedOptionalPermissions,
-                    action = action
+                    action = actionNeedOptionalPermissions
                 )
             }
         }
@@ -100,8 +116,7 @@ private fun PluginActionsList(
             )
             if (index != buttons.lastIndex) {
                 HorizontalDivider(
-                    modifier = Modifier
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.outlineVariant
                 )
             }
@@ -144,7 +159,7 @@ private fun PluginsWithoutPermissions(
     Text(
         text = title,
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .semantics { heading() }
     )
     plugins.forEach { plugin ->
@@ -168,24 +183,23 @@ private fun PluginsWithoutPermissions(
 @Composable
 private fun PluginsScreenPreview() {
     KdeTheme(context = LocalContext.current) {
-        val pluginsWithButtons = listOf(
-            MprisPlugin(),
-            RunCommandPlugin(),
-            PresenterPlugin()
-        )
+        val mprisPlugin = MprisPlugin().also { it.setContext(LocalContext.current, null) }
+        val runCommandPlugin = RunCommandPlugin().also { it.setContext(LocalContext.current, null) }
+        val presenterPlugin = PresenterPlugin().also { it.setContext(LocalContext.current, null) }
+        val pingPlugin = PingPlugin().also { it.setContext(LocalContext.current, null) }
+        val clipboardPlugin = ClipboardPlugin().also { it.setContext(LocalContext.current, null) }
 
-        pluginsWithButtons.forEach { plugin ->
-            plugin.setContext(
-                context = LocalContext.current,
-                device = null
-            )
-        }
+        val pluginsWithButtons = listOf(pingPlugin, mprisPlugin, presenterPlugin, runCommandPlugin)
+        val pluginsWithoutPermissions = listOf(clipboardPlugin, presenterPlugin)
+        val pluginsWithoutOptionalPermissions = listOf(mprisPlugin, presenterPlugin)
+
         PluginsScreenContent(
             pluginsWithButtons = pluginsWithButtons.flatMap { plugin -> plugin.getUiButtons() },
-            pluginsNeedPermissions = emptyList(),
-            pluginsNeedOptionalPermissions = emptyList(),
+            pluginsNeedPermissions = pluginsWithoutPermissions,
+            pluginsNeedOptionalPermissions = pluginsWithoutOptionalPermissions,
             onButtonClick = { /* Do nothing */ },
-            action = { /* Do nothing */ }
+            actionNeedPermissions = { /* Do nothing */ },
+            actionNeedOptionalPermissions = { /* Do nothing */ },
         )
     }
 }

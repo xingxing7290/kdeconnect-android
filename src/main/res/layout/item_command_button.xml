@@ -45,6 +45,19 @@
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/command_more"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="top|end"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:contentDescription="@string/copy_url_to_clipboard"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="&#8942;"
+                android:textSize="22sp" />
+
         </FrameLayout>
 
         <TextView

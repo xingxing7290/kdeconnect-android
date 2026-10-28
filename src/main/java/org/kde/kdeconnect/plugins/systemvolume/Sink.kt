@@ -70,17 +70,18 @@ class Sink {
         }
 
     fun addListener(l: UpdateListener) {
-        if (!listeners.contains(l)) {
-            listeners.add(l)
+        synchronized(listeners) {
+            if (!listeners.contains(l)) listeners.add(l)
         }
     }
 
     fun removeListener(l: UpdateListener) {
-        listeners.remove(l)
+        synchronized(listeners) { listeners.remove(l) }
     }
 
     private fun updateListeners() {
-        for (l in listeners) {
+        val snapshot = synchronized(listeners) { listeners.toList() }
+        for (l in snapshot) {
             l.updateSink(this)
         }
     }

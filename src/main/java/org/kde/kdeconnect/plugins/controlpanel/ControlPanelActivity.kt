@@ -3,7 +3,6 @@
  */
 package org.kde.kdeconnect.plugins.controlpanel
 
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -31,7 +30,6 @@ class ControlPanelActivity : AppCompatActivity() {
         val id = intent.getStringExtra(DEVICE_ID)
         device = id?.let { KdeConnect.getInstance().getDevice(it) }
         if (device == null) { finish(); return }
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {

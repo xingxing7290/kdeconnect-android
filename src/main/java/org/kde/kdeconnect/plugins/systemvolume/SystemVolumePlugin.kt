@@ -11,7 +11,6 @@ import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect_tp.R
-import java.util.concurrent.ConcurrentHashMap
 
 @LoadablePlugin
 class SystemVolumePlugin : Plugin() {
@@ -19,7 +18,7 @@ class SystemVolumePlugin : Plugin() {
         fun sinksChanged()
     }
 
-    private val sinkMap: ConcurrentHashMap<String, Sink> = ConcurrentHashMap()
+    @Volatile private var sinkMap: Map<String, Sink> = emptyMap()
     private val listeners: MutableList<SinkListener> = mutableListOf()
 
     override val displayName: String
@@ -30,23 +29,20 @@ class SystemVolumePlugin : Plugin() {
 
     override fun onPacketReceived(np: NetworkPacket): Boolean {
         if ("sinkList" in np) {
-            sinkMap.clear()
-
+            val replacement = linkedMapOf<String, Sink>()
             val sinkArray = np.getJsonArray("sinkList")
             for (sinkObj in sinkArray.orEmpty()) {
                 try {
                     val sink = Sink(sinkObj)
-                    sinkMap[sink.name] = sink
+                    replacement[sink.name] = sink
                 } catch (e: SerializationException) {
                     Log.e("KDEConnect", "Skipping invalid sink", e)
                 }
             }
 
-            synchronized(listeners) {
-                for (l in listeners) {
-                    l.sinksChanged()
-                }
-            }
+            sinkMap = replacement
+            val snapshot = synchronized(listeners) { listeners.toList() }
+            snapshot.forEach { it.sinksChanged() }
         } else {
             val name = np.getString("name")
             val sink = sinkMap[name]
@@ -58,7 +54,9 @@ class SystemVolumePlugin : Plugin() {
                     sink.setMute(np.getBoolean("muted"))
                 }
                 if ("enabled" in np) {
-                    sink.isDefault = np.getBoolean("enabled")
+                    val enabled = np.getBoolean("enabled")
+                    if (enabled) sinkMap.values.filter { it !== sink && it.isDefault }.forEach { it.isDefault = false }
+                    sink.isDefault = enabled
                 }
             }
         }
@@ -70,6 +68,11 @@ class SystemVolumePlugin : Plugin() {
         np["volume"] = volume
         np["name"] = name
         device.sendPacket(np)
+    }
+    internal fun requestSinks() {
+        val packet = NetworkPacket(PACKET_TYPE_SYSTEMVOLUME_REQUEST)
+        packet["requestSinks"] = true
+        device.sendPacket(packet)
     }
 
     internal fun sendMute(name: String, mute: Boolean) {
@@ -89,7 +92,7 @@ class SystemVolumePlugin : Plugin() {
     override val supportedPacketTypes: Array<String> = arrayOf(PACKET_TYPE_SYSTEMVOLUME)
     override val outgoingPacketTypes: Array<String> = arrayOf(PACKET_TYPE_SYSTEMVOLUME_REQUEST)
 
-    val sinks: MutableCollection<Sink>
+    val sinks: Collection<Sink>
         get() = sinkMap.values
 
     internal fun addSinkListener(listener: SinkListener) {

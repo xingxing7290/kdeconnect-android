@@ -21,6 +21,63 @@ import org.kde.kdeconnect.NetworkPacket
 
 @RunWith(AndroidJUnit4::class)
 class SystemVolumePluginTest {
+    private fun outputPacket(default: String = "one") = NetworkPacket("kdeconnect.systemvolume").apply {
+        set("sinkList", buildJsonArray {
+            listOf("one", "two").forEach { id ->
+                addJsonObject {
+                    put("name", id); put("description", "Same friendly name"); put("volume", if (id == "one") 23 else 42)
+                    put("maxVolume", 100); put("muted", false); put("enabled", id == default)
+                }
+            }
+        })
+    }
+    @Test fun requestingFreshSinksUsesExistingProtocol() {
+        systemVolumePlugin.requestSinks()
+        assertEquals("kdeconnect.systemvolume.request", packet?.type)
+        assertTrue(checkNotNull(packet).getBoolean("requestSinks"))
+    }
+    @Test fun defaultChangesAndRemovalDoNotSelectArbitraryDevice() {
+        systemVolumePlugin.onPacketReceived(outputPacket())
+        assertEquals("one", getDefaultSink(systemVolumePlugin)?.name)
+        assertEquals(2, systemVolumePlugin.sinks.size)
+        systemVolumePlugin.onPacketReceived(NetworkPacket("kdeconnect.systemvolume").apply {
+            set("name", "two"); set("enabled", true)
+        })
+        assertEquals("two", getDefaultSink(systemVolumePlugin)?.name)
+        assertEquals(1, systemVolumePlugin.sinks.count { it.isDefault })
+        systemVolumePlugin.onPacketReceived(outputPacket(default = "missing"))
+        assertEquals(null, getDefaultSink(systemVolumePlugin))
+        systemVolumePlugin.onPacketReceived(NetworkPacket("kdeconnect.systemvolume").apply { set("sinkList", buildJsonArray {}) })
+        assertTrue(systemVolumePlugin.sinks.isEmpty())
+    }
+    @Test fun listListenersCanRemoveThemselvesDuringNotification() {
+        var firstCalls = 0
+        var secondCalls = 0
+        val first = object : SystemVolumePlugin.SinkListener {
+            override fun sinksChanged() { firstCalls++; systemVolumePlugin.removeSinkListener(this) }
+        }
+        val second = object : SystemVolumePlugin.SinkListener {
+            override fun sinksChanged() { secondCalls++ }
+        }
+        systemVolumePlugin.addSinkListener(first)
+        systemVolumePlugin.addSinkListener(second)
+        systemVolumePlugin.onPacketReceived(outputPacket())
+        systemVolumePlugin.onPacketReceived(outputPacket())
+        assertEquals(1, firstCalls)
+        assertEquals(2, secondCalls)
+    }
+    @Test fun sinkListenersCanRemoveThemselvesDuringNotification() {
+        systemVolumePlugin.onPacketReceived(outputPacket())
+        val sink = systemVolumePlugin.sinks.first()
+        var calls = 0
+        val listener = object : Sink.UpdateListener {
+            override fun updateSink(sink: Sink) { calls++; sink.removeListener(this) }
+        }
+        sink.addListener(listener)
+        sink.setVolume(10)
+        sink.setMute(true)
+        assertEquals(1, calls)
+    }
     private lateinit var systemVolumePlugin: SystemVolumePlugin
     private lateinit var context: Context
     private lateinit var device: Device

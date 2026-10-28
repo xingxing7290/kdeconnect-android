@@ -5,7 +5,9 @@ package org.kde.kdeconnect.plugins.controlpanel
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -17,13 +19,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -33,6 +38,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +56,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
@@ -59,9 +67,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.kde.kdeconnect.plugins.systemvolume.Sink
 import org.kde.kdeconnect.plugins.systemvolume.SystemVolumePlugin
+import org.kde.kdeconnect.plugins.systemvolume.getDefaultSink
 import org.kde.kdeconnect_tp.R
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -123,8 +133,8 @@ fun ControlPanelScreen(
                 fontSize = 11.sp, color = Color(0xFF69778B), maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        Row(Modifier.weight(1f).fillMaxWidth().then(swipe), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f).fillMaxHeight().then(swipe), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 repeat(3) { row ->
                     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         repeat(6) { column ->
@@ -182,6 +192,7 @@ private fun buttonIcon(kind: String) = when (kind) {
 private data class VolumeState(val sink: Sink? = null, val volume: Int = 0, val maximum: Int = 100, val muted: Boolean = false)
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
     var state by remember(plugin) { mutableStateOf(VolumeState()) }
     DisposableEffect(plugin) {
@@ -190,8 +201,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
         var watched = emptyList<Sink>()
         fun refresh() {
             if (disposed) return
-            val sinks = plugin?.sinks?.toList().orEmpty()
-            val sink = sinks.firstOrNull { it.isDefault } ?: sinks.firstOrNull()
+            val sink = plugin?.let { getDefaultSink(it) }
             state = VolumeState(sink, sink?.volume ?: 0, sink?.maxVolume?.coerceAtLeast(1) ?: 100, sink?.mute ?: false)
         }
         val update = object : Sink.UpdateListener {
@@ -208,6 +218,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
             override fun sinksChanged() { main.post { bind() } }
         }
         plugin?.addSinkListener(list)
+        plugin?.requestSinks()
         bind()
         onDispose {
             disposed = true
@@ -216,16 +227,44 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
         }
     }
     var dragged by remember(state.sink?.name) { mutableStateOf<Float?>(null) }
+    val drag = remember(plugin) { PanelVolumeDrag(SystemClock::elapsedRealtime) { name, value -> plugin?.sendVolume(name, value) } }
+    var chooseOutput by remember { mutableStateOf(false) }
+    val interactive = enabled && state.sink != null
+    val sliderColors = SliderDefaults.colors(thumbColor = Color(0xFF286FE0), activeTrackColor = Color(0xFF286FE0), inactiveTrackColor = Color(0xFFDCE5F5))
     Column(Modifier.width(56.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(painterResource(R.drawable.ic_volume), stringResource(R.string.control_panel_volume), Modifier.size(22.dp), tint = Color(0xFF69778B))
+        Box {
+            IconButton(onClick = { chooseOutput = true }, enabled = enabled && plugin?.sinks?.isNotEmpty() == true) {
+                Icon(painterResource(R.drawable.ic_volume), stringResource(R.string.control_panel_output), Modifier.size(22.dp), tint = Color(0xFF69778B))
+            }
+            DropdownMenu(expanded = chooseOutput && enabled, onDismissRequest = { chooseOutput = false }) {
+                plugin?.sinks?.sortedBy { it.description }?.forEach { output ->
+                    DropdownMenuItem(
+                        text = { Text((if (output.isDefault) "✓ " else "") + output.description) },
+                        onClick = { plugin.sendEnable(output.name); chooseOutput = false },
+                    )
+                }
+            }
+        }
+        Text(if (state.sink == null) "--" else "${state.volume * 100 / state.maximum}%", fontSize = 11.sp, color = Color(0xFF69778B), modifier = Modifier.testTag("panel-volume-value"))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Slider(
-                value = dragged ?: state.volume.toFloat(),
-                onValueChange = { dragged = it },
-                onValueChangeFinished = { dragged?.let { value -> state.sink?.let { plugin?.sendVolume(it.name, value.roundToInt()) } }; dragged = null },
+                value = dragged ?: state.volume.toFloat().coerceIn(0f, state.maximum.toFloat()),
+                onValueChange = { dragged = drag.change(state.sink?.name, it.roundToInt(), state.maximum, interactive)?.toFloat() },
+                onValueChangeFinished = { drag.finish(state.sink?.name, interactive); dragged = null },
                 valueRange = 0f..state.maximum.toFloat(),
-                enabled = enabled && state.sink != null,
-                modifier = Modifier.requiredWidth(maxHeight).rotate(-90f),
+                enabled = interactive,
+                colors = sliderColors,
+                thumb = { Box(Modifier.size(20.dp).background(if (interactive) Color(0xFF286FE0) else Color(0xFF9BA5B4), CircleShape).border(2.dp, Color.White, CircleShape)) },
+                track = { sliderState ->
+                    SliderDefaults.Track(sliderState, Modifier.height(6.dp), interactive, sliderColors, drawStopIndicator = null, thumbTrackGapSize = 0.dp)
+                },
+                modifier = Modifier.fillMaxSize().testTag("panel-volume-slider")
+                    .layout { measurable, constraints ->
+                        val child = measurable.measure(Constraints.fixed(constraints.maxHeight, constraints.maxWidth))
+                        layout(constraints.maxWidth, constraints.maxHeight) {
+                            child.place((constraints.maxWidth - child.width) / 2, (constraints.maxHeight - child.height) / 2)
+                        }
+                    }.rotate(-90f),
             )
         }
         IconButton(onClick = { state.sink?.let { plugin?.sendMute(it.name, !state.muted) } }, enabled = enabled && state.sink != null) {

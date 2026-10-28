@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_panel_foreground">当前程序：%1$s</string>
     <string name="control_panel_title">控制面板</string>
     <string name="control_panel_description">显示已配对电脑的自定义控制面板</string>
     <string name="control_panel_syncing">正在同步电脑配置…</string>

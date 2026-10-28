@@ -116,6 +116,13 @@ fun ControlPanelScreen(
                 Icon(Icons.Default.Refresh, stringResource(R.string.control_panel_retry))
             }
         }
+        if (config?.mode == "follow" && state.foregroundApplication.isNotEmpty()) {
+            Text(
+                stringResource(R.string.control_panel_foreground, state.foregroundApplication),
+                Modifier.testTag("panel-foreground").padding(start = 12.dp, bottom = 4.dp),
+                fontSize = 11.sp, color = Color(0xFF69778B), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
         Row(Modifier.weight(1f).fillMaxWidth().then(swipe), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 repeat(3) { row ->

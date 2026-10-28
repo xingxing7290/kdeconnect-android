@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_panel_foreground">Following: %1$s</string>
     <string name="control_panel_title">Control panel</string>
     <string name="control_panel_description">Display the paired computer’s configurable control panel</string>
     <string name="control_panel_syncing">Synchronizing with computer…</string>

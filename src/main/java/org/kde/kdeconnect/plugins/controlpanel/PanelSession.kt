@@ -125,7 +125,7 @@ class PanelSession(
         val current = mutableState.value
         val config = current.config ?: return false
         if (current.connection != PanelConnection.READY || revision != config.revision || config.page(pageId) == null) return false
-        if (foregroundApplication.length > 260) return false
+        if (foregroundApplication.length > 260 || foregroundApplication.any { it.isISOControl() || it == '/' || it == '\\' }) return false
         mutableState.value = current.copy(
             activePageId = if (config.mode == "single") config.homePageId else pageId,
             foregroundApplication = foregroundApplication,

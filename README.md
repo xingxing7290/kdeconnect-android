@@ -1,5 +1,16 @@
 # KDE Connect - Android app
 
+## KDE 控制台开发分支
+
+本 fork 正在开发与桌面端同步的横屏控制面板：固定 6 x 3 槽位、多页面、应用跟随、音量及空闲表盘。当前处于开发阶段，尚未完成交付或完整测试。
+
+- [需求与参考分析](docs/control-panel/REQUIREMENTS.zh-CN.md)
+- [技术方案](docs/control-panel/ARCHITECTURE.zh-CN.md)
+- [开发计划与验收进度](docs/control-panel/PLAN.zh-CN.md)
+- [配套桌面端](https://github.com/xingxing7290/kdeconnect-kde)
+
+原 KDE Connect 功能与上游说明保留如下。
+
 KDE Connect is a multi-platform app that allows your devices to communicate (eg: your phone and your computer).
 
 ## (Some) Features

@@ -349,3 +349,8 @@ tasks.named("generateLicenseReport") {
 tasks.named("preBuild") {
     dependsOn("generateLicenseReport")
 }
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    inputs.file(layout.projectDirectory.file("docs/control-panel/fixtures/config-v1.json"))
+        .withPropertyName("controlPanelConfigFixture")
+}

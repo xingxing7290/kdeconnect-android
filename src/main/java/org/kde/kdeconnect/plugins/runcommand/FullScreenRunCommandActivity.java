@@ -122,7 +122,7 @@ public class FullScreenRunCommandActivity extends BaseActivity<ActivityRunComman
     }
 
     private void updateView() {
-        RunCommandPlugin plugin = KdeConnect.getInstance().getDevicePlugin(deviceId, RunCommandPlugin.class);
+        RunCommandPlugin plugin = KdeConnect.Companion.getInstance().getDevicePlugin(deviceId, RunCommandPlugin.class);
         if (plugin == null) {
             Log.e("RunCommand", "Plugin is null");
             finish();
@@ -231,7 +231,7 @@ public class FullScreenRunCommandActivity extends BaseActivity<ActivityRunComman
     protected void onResume() {
         super.onResume();
 
-        RunCommandPlugin plugin = KdeConnect.getInstance().getDevicePlugin(deviceId, RunCommandPlugin.class);
+        RunCommandPlugin plugin = KdeConnect.Companion.getInstance().getDevicePlugin(deviceId, RunCommandPlugin.class);
         if (plugin == null) {
             finish();
             return;
@@ -242,7 +242,7 @@ public class FullScreenRunCommandActivity extends BaseActivity<ActivityRunComman
     @Override
     protected void onPause() {
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-        RunCommandPlugin plugin = KdeConnect.getInstance().getDevicePlugin(deviceId, RunCommandPlugin.class);
+        RunCommandPlugin plugin = KdeConnect.Companion.getInstance().getDevicePlugin(deviceId, RunCommandPlugin.class);
         if (plugin == null) {
             super.onPause();
             return;

@@ -153,6 +153,7 @@ class RunCommandActivity : AppCompatActivity() {
             finish()
             return
         }
+        replaceCommands(plugin)
     }
 
     companion object {

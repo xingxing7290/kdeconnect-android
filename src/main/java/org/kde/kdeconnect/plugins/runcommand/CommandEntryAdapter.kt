@@ -34,7 +34,7 @@ class CommandEntryAdapter(
         val commandBadge: TextView = view.findViewById(R.id.command_badge)
         val commandFavicon: ImageView = view.findViewById(R.id.command_favicon)
         val commandMore: TextView = view.findViewById(R.id.command_more)
-        
+
         init {
             // 使卡片保持正方形
             view.post {
@@ -62,7 +62,7 @@ class CommandEntryAdapter(
             holder.commandBadge.text = badge
 
             bindFavicon(holder, command)
-            
+
             holder.itemView.setOnClickListener {
                 onItemClick.invoke(command)
             }

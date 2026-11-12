@@ -13,7 +13,9 @@ param(
     [string]$ResourceId = '',
     [string]$IpAddress = '10.0.2.2',
     [string]$DesktopId = '',
-    [string]$Package = 'org.kde.kdeconnect_tp.debug'
+    [string]$Package = 'org.kde.kdeconnect_tp.debug',
+    [ValidateRange(0.02, 0.98)][double]$TapFractionX = 0.5,
+    [ValidateRange(0.02, 0.98)][double]$TapFractionY = 0.5
 )
 $ErrorActionPreference = 'Stop'
 if (!(Test-Path -LiteralPath $AdbPath -PathType Leaf)) { throw 'ADB executable not found' }
@@ -125,6 +127,8 @@ if ($Action -in @('Tap', 'Swipe')) {
     $x = [int](($left + $right) / 2)
     $y = [int](($top + $bottom) / 2)
     if ($Action -eq 'Tap') {
+        $x = [int]($left + ($right - $left) * $TapFractionX)
+        $y = [int]($top + ($bottom - $top) * $TapFractionY)
         [void](Invoke-TestAdb @('shell', 'input', 'tap', "$x", "$y"))
     } else {
         $x1 = $x2 = $x

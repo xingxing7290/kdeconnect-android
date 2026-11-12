@@ -49,16 +49,20 @@ internal fun PanelInformationDial(options: PanelIdle, now: Calendar, weather: Pa
                             fontWeight = FontWeight.Light, fontFamily = FontFamily.Monospace, maxLines = 1, modifier = Modifier.weight(1f))
                         Text(SimpleDateFormat("ss", locale).format(now.time), color = quiet, fontSize = (30 * unit).sp, modifier = Modifier.padding(bottom = gap))
                     }
-                    Row(Modifier.fillMaxWidth().weight(0.47f).border(1.dp, ink).padding(gap), verticalAlignment = Alignment.CenterVertically) {
-                        PanelWeatherGlyph(if (fresh) weather?.weatherCode else null, ink, Modifier.weight(0.45f).fillMaxHeight())
-                        Column(Modifier.weight(0.55f), verticalArrangement = Arrangement.spacedBy(gap / 2)) {
-                            Text(if (fresh) "${checkNotNull(weather?.temperature).roundToInt()}°C" else "--°C", color = ink, fontSize = (37 * unit).sp,
-                                maxLines = 1, modifier = Modifier.testTag("panel-weather-temperature"))
-                            Text(panelWeatherStatus(weather, seconds), color = ink, fontSize = (16 * unit).sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.testTag("panel-weather-status"))
+                    Column(Modifier.fillMaxWidth().weight(0.47f).border(1.dp, ink).padding(gap / 2).testTag("panel-info-current-weather")) {
+                        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            PanelWeatherGlyph(if (fresh) weather?.weatherCode else null, ink, Modifier.weight(0.45f).fillMaxHeight())
+                            Text(if (fresh) "${checkNotNull(weather?.temperature).roundToInt()}°C" else "--°C", color = ink,
+                                fontSize = (37 * unit).sp, lineHeight = (42 * unit).sp, maxLines = 1,
+                                modifier = Modifier.weight(0.55f).testTag("panel-weather-temperature"))
+                        }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                            Text(panelWeatherStatus(weather, seconds), color = ink, fontSize = (16 * unit).sp, lineHeight = (20 * unit).sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).testTag("panel-weather-status"))
                             val today = days.firstOrNull()?.takeIf { it.date == PanelWeatherSnapshot.dateAtOffset(seconds, weather?.utcOffsetSeconds ?: 0) }
                             Text(today?.let { "${it.minimum.roundToInt()}° / ${it.maximum.roundToInt()}°" } ?: "--° / --°", color = quiet,
-                                fontSize = (16 * unit).sp, maxLines = 1)
+                                fontSize = (16 * unit).sp, lineHeight = (20 * unit).sp, maxLines = 1,
+                                modifier = Modifier.testTag("panel-info-today-range"))
                         }
                     }
                 }

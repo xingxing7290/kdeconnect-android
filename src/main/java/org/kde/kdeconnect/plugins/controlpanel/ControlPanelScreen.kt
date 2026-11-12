@@ -13,6 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -50,6 +51,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
@@ -59,10 +61,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.core.graphics.ColorUtils
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -102,6 +108,10 @@ fun ControlPanelScreen(
     val config = state.config
     val ready = plugin != null && state.connection == PanelConnection.READY
     val background = config?.appearance?.background?.let { Color(android.graphics.Color.parseColor(it)) } ?: Color(0xFFF4F6FA)
+    val primary = panelReadableColor(Color(0xFF25334A), background)
+    val secondary = panelReadableColor(Color(0xFF69778B), background)
+    val accent = panelReadableColor(Color(0xFF286FE0), background)
+    val warning = panelReadableColor(Color(0xFFB3261E), background)
     val page = config?.page(state.activePageId) ?: config?.pages?.firstOrNull()
     val pages = if (config?.mode == "single") config.pages.filter { it.id == config.homePageId } else config?.pages.orEmpty()
     fun movePage(direction: Int) {
@@ -122,88 +132,121 @@ fun ControlPanelScreen(
             }
         }
     }
-    Column(Modifier.fillMaxSize().background(background).safeDrawingPadding().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.control_panel_back)) }
-            Text(deviceName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color(0xFF25334A))
-            IconButton(onClick = { onSynchronize?.invoke() ?: plugin?.synchronize() }, enabled = plugin != null || onSynchronize != null) {
-                Icon(Icons.Default.Refresh, stringResource(R.string.control_panel_retry))
-            }
-        }
-        if (!ready) {
-            Text(
-                when (state.connection) {
-                    PanelConnection.SYNCING -> stringResource(R.string.control_panel_syncing)
-                    PanelConnection.ERROR -> panelErrorMessage(state.error)
-                    else -> stringResource(R.string.control_panel_offline)
-                },
-                modifier = Modifier.fillMaxWidth().testTag("panel-connection-message").semantics { liveRegion = LiveRegionMode.Polite },
-                color = Color(0xFFB3261E), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (config?.mode == "follow" && state.foregroundApplication.isNotEmpty()) {
-            Text(
-                stringResource(R.string.control_panel_foreground, state.foregroundApplication),
-                Modifier.testTag("panel-foreground").padding(start = 12.dp, bottom = 4.dp),
-                fontSize = 11.sp, color = Color(0xFF69778B), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (iconProblem) Text(stringResource(R.string.control_panel_icon_problem), fontSize = 11.sp, color = Color(0xFFB3261E))
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.weight(1f).fillMaxHeight().then(swipe), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                repeat(3) { row ->
-                    Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        repeat(6) { column ->
-                            val index = row * 6 + column
-                            val button = page?.slots?.getOrNull(index)
-                            val canActivate = ready && button != null && button.id !in state.pendingButtons
-                            val slotDescription = button?.name ?: stringResource(R.string.control_panel_empty_slot, index + 1)
-                            Surface(
-                                onClick = { button?.let { plugin?.activate(it.id) } },
-                                enabled = canActivate,
-                                modifier = Modifier.weight(1f).fillMaxHeight().testTag("panel-slot-$index")
-                                    .alpha(if (ready || button == null) 1f else 0.5f)
-                                    .semantics { contentDescription = slotDescription; if (!canActivate) disabled() },
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFFBFCFE),
-                                border = BorderStroke(1.dp, Color(0xFFDCE1E8)),
-                                shadowElevation = 1.dp,
-                            ) {
-                                Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                    if (button == null) Text("+", color = Color(0xFF9BA5B4), fontSize = 28.sp)
-                                    else {
-                                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                            if (button.id in state.pendingButtons) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
-                                            else PanelButtonIcon(button, assetCache)
+    BoxWithConstraints(Modifier.fillMaxSize().background(background).safeDrawingPadding().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        var headerHeight by remember { mutableIntStateOf(0) }
+        var footerHeight by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        var renderedLabelHeight by remember(density.density, density.fontScale, config?.appearance?.showLabels) { mutableIntStateOf(0) }
+        val chromeHeight = with(LocalDensity.current) { (headerHeight + footerHeight).toDp() }
+        val labelHeight = if (config?.appearance?.showLabels == true) with(density) { maxOf(14.sp.toDp(), renderedLabelHeight.toDp()) } else 0.dp
+        // Preserve the icon, scaled label and padding in each of the three rows.
+        val minimumGridHeight = (48.dp + labelHeight + 8.dp) * 3 + 20.dp
+        val contentHeight = maxOf(maxHeight, chromeHeight + minimumGridHeight)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("panel-scroll")) {
+            Column(Modifier.fillMaxWidth().height(contentHeight)) {
+                Column(Modifier.fillMaxWidth().onSizeChanged { headerHeight = it.height }) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.control_panel_back), tint = primary) }
+                        Text(deviceName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, color = primary)
+                        IconButton(onClick = { onSynchronize?.invoke() ?: plugin?.synchronize() }, enabled = plugin != null || onSynchronize != null) {
+                            Icon(Icons.Default.Refresh, stringResource(R.string.control_panel_retry), tint = primary)
+                        }
+                    }
+                    if (!ready) {
+                        Text(
+                            when (state.connection) {
+                                PanelConnection.SYNCING -> stringResource(R.string.control_panel_syncing)
+                                PanelConnection.ERROR -> panelErrorMessage(state.error)
+                                else -> stringResource(R.string.control_panel_offline)
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("panel-connection-message").semantics { liveRegion = LiveRegionMode.Polite },
+                            color = warning, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (config?.mode == "follow" && state.foregroundApplication.isNotEmpty()) {
+                        Text(
+                            stringResource(R.string.control_panel_foreground, state.foregroundApplication),
+                            Modifier.testTag("panel-foreground").padding(start = 12.dp, bottom = 4.dp),
+                            fontSize = 11.sp, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (iconProblem) Text(stringResource(R.string.control_panel_icon_problem), fontSize = 11.sp, color = warning)
+                }
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).fillMaxHeight().then(swipe).testTag("panel-grid"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(3) { row ->
+                            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                repeat(6) { column ->
+                                    val index = row * 6 + column
+                                    val button = page?.slots?.getOrNull(index)
+                                    val canActivate = ready && button != null && button.id !in state.pendingButtons
+                                    val slotDescription = button?.name ?: stringResource(R.string.control_panel_empty_slot, index + 1)
+                                    Surface(
+                                        onClick = { button?.let { plugin?.activate(it.id) } },
+                                        enabled = canActivate,
+                                        modifier = Modifier.weight(1f).fillMaxHeight().testTag("panel-slot-$index")
+                                            .alpha(if (ready || button == null) 1f else 0.5f)
+                                            .semantics { contentDescription = slotDescription; if (!canActivate) disabled() },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color(0xFFFBFCFE),
+                                        border = BorderStroke(1.dp, Color(0xFFDCE1E8)),
+                                        shadowElevation = 1.dp,
+                                    ) {
+                                        Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                            if (button == null) Text("+", color = Color(0xFF9BA5B4), fontSize = 28.sp)
+                                            else {
+                                                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                                    if (button.id in state.pendingButtons) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
+                                                    else PanelButtonIcon(button, assetCache)
+                                                }
+                                                if (config?.appearance?.showLabels == true) Text(button.name, modifier = Modifier.fillMaxWidth().testTag("panel-slot-label-$index"), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = Color(0xFF25334A),
+                                                    onTextLayout = { renderedLabelHeight = maxOf(renderedLabelHeight, it.size.height) })
+                                            }
                                         }
-                                        if (config?.appearance?.showLabels == true) Text(button.name, modifier = Modifier.fillMaxWidth().testTag("panel-slot-label-$index"), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = Color(0xFF25334A))
                                     }
                                 }
                             }
                         }
                     }
+                    if (config?.appearance?.showVolume == true) PanelVolume(volume, ready, background)
+                }
+                Column(Modifier.fillMaxWidth().onSizeChanged { footerHeight = it.height }) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                        pages.forEachIndexed { index, item ->
+                            TextButton(onClick = { plugin?.selectPage(item.id) }, enabled = ready) {
+                                Text("${index + 1}  ${item.name}", color = if (item.id == page?.id) accent else secondary, maxLines = 1)
+                            }
+                        }
+                        if (page?.slots?.all { it == null } != false) Text(stringResource(R.string.control_panel_empty), fontSize = 12.sp, color = secondary)
+                    }
+                    state.lastResult?.let { result ->
+                        if (ready) Text(
+                            if (result.success) stringResource(R.string.control_panel_success)
+                            else stringResource(R.string.control_panel_failed, panelErrorMessage(result.error)),
+                            modifier = Modifier.fillMaxWidth().testTag("panel-action-result").semantics { liveRegion = LiveRegionMode.Polite },
+                            color = panelReadableColor(if (result.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error, background),
+                            fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-            if (config?.appearance?.showVolume == true) PanelVolume(volume, ready)
-        }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-            pages.forEachIndexed { index, item ->
-                TextButton(onClick = { plugin?.selectPage(item.id) }, enabled = ready) {
-                    Text("${index + 1}  ${item.name}", color = if (item.id == page?.id) Color(0xFF286FE0) else Color(0xFF69778B), maxLines = 1)
-                }
-            }
-            if (page?.slots?.all { it == null } != false) Text(stringResource(R.string.control_panel_empty), fontSize = 12.sp, color = Color(0xFF69778B))
-        }
-        state.lastResult?.let { result ->
-            if (ready) Text(
-                if (result.success) stringResource(R.string.control_panel_success)
-                else stringResource(R.string.control_panel_failed, panelErrorMessage(result.error)),
-                modifier = Modifier.fillMaxWidth().testTag("panel-action-result").semantics { liveRegion = LiveRegionMode.Polite },
-                color = if (result.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
-                fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
         }
     }
+}
+
+private fun panelReadableColor(preferred: Color, background: Color): Color {
+    val base = background.toArgb()
+    val original = preferred.toArgb()
+    if (ColorUtils.calculateContrast(original, base) >= 4.5) return preferred
+    val target = if (ColorUtils.calculateContrast(android.graphics.Color.BLACK, base) >= ColorUtils.calculateContrast(android.graphics.Color.WHITE, base))
+        android.graphics.Color.BLACK else android.graphics.Color.WHITE
+    var low = 0f
+    var high = 1f
+    repeat(8) {
+        val middle = (low + high) / 2
+        if (ColorUtils.calculateContrast(ColorUtils.blendARGB(original, target, middle), base) >= 4.5) high = middle else low = middle
+    }
+    return Color(ColorUtils.blendARGB(original, target, high))
 }
 
 @Composable
@@ -249,7 +292,7 @@ private data class VolumeState(val sink: Sink? = null, val volume: Int = 0, val 
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
+private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean, background: Color) {
     var state by remember(plugin) { mutableStateOf(VolumeState()) }
     DisposableEffect(plugin) {
         val main = Handler(Looper.getMainLooper())
@@ -286,11 +329,13 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
     val drag = remember(plugin) { PanelVolumeDrag(SystemClock::elapsedRealtime) { name, value -> plugin?.sendVolume(name, value) } }
     var chooseOutput by remember { mutableStateOf(false) }
     val interactive = enabled && state.sink != null
-    val sliderColors = SliderDefaults.colors(thumbColor = Color(0xFF286FE0), activeTrackColor = Color(0xFF286FE0), inactiveTrackColor = Color(0xFFDCE5F5))
+    val foreground = panelReadableColor(Color(0xFF69778B), background)
+    val accent = panelReadableColor(Color(0xFF286FE0), background)
+    val sliderColors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent, inactiveTrackColor = Color(0xFFDCE5F5))
     Column(Modifier.width(56.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             IconButton(onClick = { chooseOutput = true }, enabled = enabled && plugin?.sinks?.isNotEmpty() == true) {
-                Icon(painterResource(R.drawable.ic_volume), stringResource(R.string.control_panel_output), Modifier.size(22.dp), tint = Color(0xFF69778B))
+                Icon(painterResource(R.drawable.ic_volume), stringResource(R.string.control_panel_output), Modifier.size(22.dp), tint = foreground)
             }
             DropdownMenu(expanded = chooseOutput && enabled, onDismissRequest = { chooseOutput = false }) {
                 plugin?.sinks?.sortedBy { it.description }?.forEach { output ->
@@ -301,7 +346,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
                 }
             }
         }
-        Text(if (state.sink == null) "--" else "${state.volume * 100 / state.maximum}%", fontSize = 11.sp, color = Color(0xFF69778B), modifier = Modifier.testTag("panel-volume-value"))
+        Text(if (state.sink == null) "--" else "${state.volume * 100 / state.maximum}%", fontSize = 11.sp, color = foreground, modifier = Modifier.testTag("panel-volume-value"))
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Slider(
                 value = dragged ?: state.volume.toFloat().coerceIn(0f, state.maximum.toFloat()),
@@ -310,7 +355,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
                 valueRange = 0f..state.maximum.toFloat(),
                 enabled = interactive,
                 colors = sliderColors,
-                thumb = { Box(Modifier.size(20.dp).background(if (interactive) Color(0xFF286FE0) else Color(0xFF9BA5B4), CircleShape).border(2.dp, Color.White, CircleShape)) },
+                thumb = { Box(Modifier.size(20.dp).background(if (interactive) accent else Color(0xFF9BA5B4), CircleShape).border(2.dp, Color.White, CircleShape)) },
                 track = { sliderState ->
                     SliderDefaults.Track(sliderState, Modifier.height(6.dp), interactive, sliderColors, drawStopIndicator = null, thumbTrackGapSize = 0.dp)
                 },
@@ -324,7 +369,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
             )
         }
         IconButton(onClick = { state.sink?.let { plugin?.sendMute(it.name, !state.muted) } }, enabled = enabled && state.sink != null) {
-            Icon(painterResource(if (state.muted) R.drawable.ic_volume_mute else R.drawable.ic_volume), stringResource(if (state.muted) R.string.control_panel_unmute else R.string.control_panel_mute), tint = Color(0xFF69778B))
+            Icon(painterResource(if (state.muted) R.drawable.ic_volume_mute else R.drawable.ic_volume), stringResource(if (state.muted) R.string.control_panel_unmute else R.string.control_panel_mute), tint = foreground)
         }
     }
 }

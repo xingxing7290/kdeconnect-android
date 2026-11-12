@@ -172,9 +172,11 @@ fun ControlPanelScreen(
                                 Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     if (button == null) Text("+", color = Color(0xFF9BA5B4), fontSize = 28.sp)
                                     else {
-                                        if (button.id in state.pendingButtons) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
-                                        else PanelButtonIcon(button, assetCache)
-                                        if (config?.appearance?.showLabels == true) Text(button.name, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = Color(0xFF25334A))
+                                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                            if (button.id in state.pendingButtons) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
+                                            else PanelButtonIcon(button, assetCache)
+                                        }
+                                        if (config?.appearance?.showLabels == true) Text(button.name, modifier = Modifier.fillMaxWidth().testTag("panel-slot-label-$index"), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = Color(0xFF25334A))
                                     }
                                 }
                             }
@@ -231,7 +233,7 @@ private fun PanelButtonIcon(button: PanelButton, cache: PanelAssetCache?) {
     val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, button.icon, version) {
         value = withContext(Dispatchers.IO) { cache?.bitmap(button.icon)?.asImageBitmap() }
     }
-    if (image != null) Image(checkNotNull(image), null, Modifier.size(48.dp), contentScale = ContentScale.Fit)
+    if (image != null) Image(checkNotNull(image), null, Modifier.size(48.dp).testTag("panel-button-image-${button.id}"), contentScale = ContentScale.Fit)
     else Icon(painterResource(buttonIcon(button.kind)), null, Modifier.size(30.dp), tint = Color(0xFF4177C3))
 }
 

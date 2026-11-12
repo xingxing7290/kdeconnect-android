@@ -5,9 +5,12 @@ package org.kde.kdeconnect.plugins.controlpanel
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
@@ -18,6 +21,8 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
@@ -27,12 +32,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.mockk.every
 import io.mockk.mockk
 import java.io.File
+import java.io.ByteArrayOutputStream
 import kotlinx.serialization.json.JsonObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.rules.TemporaryFolder
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.NetworkPacket
@@ -48,6 +55,7 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ControlPanelTouchUiTest {
     @get:Rule val compose = createEmptyComposeRule()
+    @get:Rule val temporary = TemporaryFolder()
     private var controller: ActivityController<ComponentActivity>? = null
     private var plugin: ControlPanelPlugin? = null
     private val sent = mutableListOf<NetworkPacket>()
@@ -59,7 +67,7 @@ class ControlPanelTouchUiTest {
             this["config"] = JsonHelper.json.parseToJsonElement(config.encode()) as JsonObject
         }))
     }
-    private fun open(config: PanelConfig = fixture(), fontScale: Float = 1f) {
+    private fun open(config: PanelConfig = fixture(), fontScale: Float = 1f, assets: PanelAssetCache? = null) {
         RuntimeEnvironment.setFontScale(fontScale)
         val application = ApplicationProvider.getApplicationContext<KdeConnect>()
         val device = mockk<Device> {
@@ -82,7 +90,7 @@ class ControlPanelTouchUiTest {
             MaterialTheme {
                 val scale = LocalDensity.current.fontScale
                 SideEffect { observedFontScale = scale }
-                ControlPanelScreen("本地触摸测试", control.session, control, null, onBack = {})
+                ControlPanelScreen("本地触摸测试", control.session, control, null, onBack = {}, assetCache = assets)
             }
         }
         compose.waitForIdle()
@@ -156,5 +164,34 @@ class ControlPanelTouchUiTest {
         compose.onNodeWithText("KDE 文档").assertIsDisplayed()
         compose.onNodeWithTag("panel-slot-0").assertContentDescriptionEquals("KDE 文档").performTouchInput { click() }
         assertEquals(1, requests("action").size)
+    }
+
+    @Test
+    @Config(sdk = [28, 37], qualifiers = "zh-w800dp-h360dp-land")
+    fun loadedIconsAtDoubleTextScaleDoNotClipTheLabelLine() {
+        val base = fixture()
+        val image = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.BLUE) }
+        val bytes = ByteArrayOutputStream().also { image.compress(Bitmap.CompressFormat.PNG, 100, it); image.recycle() }.toByteArray()
+        val iconId = PanelAssetCache.hash(bytes)
+        val assets = PanelAssetCache(temporary.newFolder())
+        assertTrue(assets.accept(iconId, bytes))
+        val firstPage = base.pages.first()
+        val button = requireNotNull(firstPage.slots[0]).copy(icon = iconId)
+        val slots = firstPage.slots.toMutableList().apply { this[0] = button }
+        open(base.copy(appearance = base.appearance.copy(showVolume = false), pages = listOf(firstPage.copy(slots = slots)) + base.pages.drop(1)), 2f, assets)
+        compose.runOnIdle { requireNotNull(plugin).session.disconnected() }
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithTag("panel-button-image-${button.id}", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        val label = compose.onNodeWithTag("panel-slot-label-0", useUnmergedTree = true)
+        val layouts = mutableListOf<TextLayoutResult>()
+        label.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val textLayout = layouts.single()
+        val visible = label.fetchSemanticsNode().boundsInRoot
+        val slot = compose.onNodeWithTag("panel-slot-0").fetchSemanticsNode().boundsInRoot
+        assertTrue("Label must retain its full line height", visible.height >= textLayout.getLineBottom(0) - 1f)
+        assertTrue("Label must remain inside its button", visible.bottom <= slot.bottom && visible.top >= slot.top)
+        compose.onNodeWithTag("panel-slot-0").assertContentDescriptionEquals(button.name).assertIsNotEnabled()
+        assertTrue(requests("action").isEmpty())
     }
 }

@@ -266,7 +266,7 @@ class ControlPanelPluginTest {
 
     @Test fun callbacksAndTimersFromDestroyedSessionCannotMutateReconnectedSession() {
         val callbacks = mutableListOf<Device.SendPacketStatusCallback>()
-        every { device.sendPacket(any(), any()) } answers { sent.add(arg(0)); callbacks.add(arg(1)); Unit }
+        every { device.sendPacket(any(), any()) } answers { sent.add(arg(0)); callbacks.add(arg(1)) }
         plugin.onCreate()
         val oldCallback = callbacks.single()
         val ticker = ControlPanelPlugin::class.java.getDeclaredField("tick").apply { isAccessible = true }

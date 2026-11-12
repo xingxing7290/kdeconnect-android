@@ -99,7 +99,9 @@ class ControlPanelIdleActivityTest {
             tapFirstSlot()
             assertEquals("Only the next tap can activate the button", 2, actions().size)
             acknowledge()
-            assertFalse(idle.key(29, true))
+            // UI scheduling can advance beyond the idle deadline; start the focus case awake.
+            idle.wake()
+            assertFalse("An awake key must start the unfinished-key focus scenario", idle.key(29, true))
             activity.onWindowFocusChanged(false)
             looper.idleFor(10_000, TimeUnit.MILLISECONDS)
             assertFalse("An unfocused window must not enter the dial", idle.showing.value)

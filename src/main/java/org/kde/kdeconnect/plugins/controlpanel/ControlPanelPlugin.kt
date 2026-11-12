@@ -55,8 +55,7 @@ class ControlPanelPlugin : Plugin() {
         assets = PanelAssetTransfers(PanelAssetCache.get(context), session, iconProblem, { id, revision ->
             send(request("asset").apply { this["assetId"] = id; this["revision"] = revision })
         }, ::synchronize)
-        preferences.getString("panel_config", null)?.let(session::restoreDisplay)
-        preferences.getString("panel_weather", null)?.let { session.restoreWeather(it) }
+        PanelDisplayCache.restore(preferences, session)
         session.connected()
         syncAttempts = 0
         sendConfigRequest()

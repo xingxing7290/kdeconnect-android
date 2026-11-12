@@ -42,7 +42,7 @@ class ControlPanelActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra(DEVICE_ID)
         device = id?.let { KdeConnect.getInstance().getDevice(it) }
-        if (device == null) { finish(); return }
+        if (device?.isPaired != true) { finish(); return }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -90,9 +90,17 @@ class ControlPanelActivity : AppCompatActivity() {
     }
 
     private fun bindPlugins() {
-        plugin = device?.getPlugin<ControlPanelPlugin>()
-        volume = device?.getPlugin<SystemVolumePlugin>()
-        plugin?.session?.let { displaySession = it }
+        val currentDevice = device
+        if (currentDevice == null || !currentDevice.isPaired) {
+            plugin = null
+            volume = null
+            displaySession = null
+            finish()
+            return
+        }
+        plugin = currentDevice.getPlugin<ControlPanelPlugin>()
+        volume = currentDevice.getPlugin<SystemVolumePlugin>()
+        displaySession = plugin?.session ?: displaySession ?: PanelDisplayCache.offline(this, currentDevice)
     }
 
     override fun onStart() {

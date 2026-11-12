@@ -6,9 +6,10 @@ param(
     [Parameter(Mandatory)][string]$ExpectedAvd,
     [Parameter(Mandatory)][string]$EvidenceDirectory,
     [int]$ServerPort = 5038,
-    [ValidateSet('State', 'Tap', 'InputIp', 'DiscoverDesktop')][string]$Action = 'State',
+    [ValidateSet('State', 'Tap', 'Swipe', 'Home', 'Recents', 'InputIp', 'DiscoverDesktop')][string]$Action = 'State',
     [string]$Text = '',
     [string]$Description = '',
+    [ValidateSet('Up', 'Down', 'Left', 'Right')][string]$SwipeDirection = 'Up',
     [string]$ResourceId = '',
     [string]$IpAddress = '10.0.2.2',
     [string]$DesktopId = '',
@@ -17,7 +18,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if (!(Test-Path -LiteralPath $AdbPath -PathType Leaf)) { throw 'ADB executable not found' }
 if ($ServerPort -lt 1024 -or $ServerPort -gt 65535) { throw 'Invalid dedicated ADB port' }
-if ($Action -eq 'Tap' -and (!$Text -and !$Description -and !$ResourceId)) { throw 'Tap requires an exact text/description or resource ID' }
+if ($Action -in @('Tap', 'Swipe') -and (!$Text -and !$Description -and !$ResourceId)) { throw 'Tap/Swipe requires an exact text/description or resource ID' }
 if ($Action -eq 'DiscoverDesktop' -and $DesktopId -notmatch '^[a-zA-Z0-9_-]{32,38}$') { throw 'A verified private desktop device ID is required' }
 $evidenceRoot = [IO.Path]::GetFullPath($EvidenceDirectory)
 New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
@@ -81,6 +82,11 @@ function Read-TestUi {
 }
 
 $state = Read-TestUi
+if ($Action -in @('Home', 'Recents')) {
+    $key = if ($Action -eq 'Home') { 'KEYCODE_HOME' } else { 'KEYCODE_APP_SWITCH' }
+    [void](Invoke-TestAdb @('shell', 'input', 'keyevent', $key))
+    $state = Read-TestUi
+}
 if ($Action -eq 'DiscoverDesktop') {
     $routes = Invoke-TestAdb @('reverse', '--list')
     if ($routes -notmatch '(?m)^\S+\s+tcp:1717\s+tcp:1716\s*$') { throw 'Expected dedicated reverse tcp:1717 tcp:1716 route is missing' }
@@ -104,7 +110,7 @@ if ($Action -eq 'InputIp') {
     [void](Invoke-TestAdb @('shell', 'input', 'text', $IpAddress))
     $state = Read-TestUi
 }
-if ($Action -eq 'Tap') {
+if ($Action -in @('Tap', 'Swipe')) {
     $targets = @($state.Document.SelectNodes('//node') | Where-Object {
         $_.package -eq $Package -and $_.enabled -eq 'true' -and
         ((!$ResourceId -or $_.'resource-id' -eq $ResourceId) -and
@@ -118,7 +124,22 @@ if ($Action -eq 'Tap') {
     if ($right -le $left -or $bottom -le $top) { throw 'Empty target bounds' }
     $x = [int](($left + $right) / 2)
     $y = [int](($top + $bottom) / 2)
-    [void](Invoke-TestAdb @('shell', 'input', 'tap', "$x", "$y"))
+    if ($Action -eq 'Tap') {
+        [void](Invoke-TestAdb @('shell', 'input', 'tap', "$x", "$y"))
+    } else {
+        $x1 = $x2 = $x
+        $y1 = $y2 = $y
+        if ($SwipeDirection -in @('Up', 'Down')) {
+            $y1 = [int]($top + ($bottom - $top) * 0.9)
+            $y2 = [int]($top + ($bottom - $top) * 0.1)
+            if ($SwipeDirection -eq 'Down') { $y1, $y2 = $y2, $y1 }
+        } else {
+            $x1 = [int]($left + ($right - $left) * 0.9)
+            $x2 = [int]($left + ($right - $left) * 0.1)
+            if ($SwipeDirection -eq 'Right') { $x1, $x2 = $x2, $x1 }
+        }
+        [void](Invoke-TestAdb @('shell', 'input', 'swipe', "$x1", "$y1", "$x2", "$y2", '400'))
+    }
     $state = Read-TestUi
 }
 

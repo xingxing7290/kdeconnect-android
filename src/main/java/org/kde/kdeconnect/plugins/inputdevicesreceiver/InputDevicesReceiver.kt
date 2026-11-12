@@ -6,6 +6,7 @@
 package org.kde.kdeconnect.plugins.inputdevicesreceiver
 
 import android.hardware.display.DisplayManager
+import android.os.Build
 import android.util.DisplayMetrics
 import android.view.Display
 import org.kde.kdeconnect.NetworkPacket
@@ -72,7 +73,7 @@ class InputDevicesReceiverPlugin : Plugin() {
 
         // If we do not have the permission or the MouseReceiverPlugin is disabled (either from the beginning or the user disabled it while the cursor was in our possession),
         // we must hand over control to the other end.
-        if (mouseReceiverPlugin == null) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || mouseReceiverPlugin == null) {
             Cursor.x = np.getInt("deltax", Cursor.x)
             Cursor.y = np.getInt("deltay", Cursor.y)
 

@@ -466,8 +466,11 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
                 android:value="org.kde.kdeconnect.ui.MainActivity" />
         </activity>
 
+        <!-- Versioned enabled resources gate these framework services on older Android releases. -->
         <service
             android:name="org.kde.kdeconnect.plugins.clipboard.ClipboardTileService"
+            android:enabled="@bool/clipboard_tile_service_enabled"
+            tools:targetApi="24"
             android:icon="@drawable/ic_baseline_content_paste_24"
             android:exported="true"
             android:label="@string/send_clipboard"
@@ -478,6 +481,8 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
         </service>
 
         <service android:name="org.kde.kdeconnect.plugins.runcommand.RunCommandControlsProviderService"
+            android:enabled="@bool/runcommand_controls_service_enabled"
+            tools:targetApi="30"
             android:label="@string/kde_connect"
             android:exported="true"
             android:permission="android.permission.BIND_CONTROLS">

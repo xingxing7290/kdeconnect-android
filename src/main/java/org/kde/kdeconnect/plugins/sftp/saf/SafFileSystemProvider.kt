@@ -5,6 +5,7 @@
  */
 package org.kde.kdeconnect.plugins.sftp.saf
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -374,6 +375,7 @@ class SafFileSystemProvider(
         }
     }
 
+    @SuppressLint("NewApi") // Existing NIO desugaring rewrites these bounds/casts to bundled j$.nio types.
     override fun <V : FileAttributeView> getFileAttributeView(
         path: Path,
         type: Class<V>,

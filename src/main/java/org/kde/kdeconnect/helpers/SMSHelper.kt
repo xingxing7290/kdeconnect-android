@@ -10,9 +10,11 @@ import android.annotation.SuppressLint
 import android.content.ContentUris
 import android.content.Context
 import android.database.sqlite.SQLiteException
+import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.media.ThumbnailUtils
 import android.net.Uri
+import android.os.Build
 import android.os.Looper
 import android.provider.Telephony
 import android.util.Log
@@ -39,6 +41,23 @@ import java.util.concurrent.locks.ReentrantLock
 object SMSHelper {
     private const val THUMBNAIL_HEIGHT = 100
     private const val THUMBNAIL_WIDTH = 100
+
+    internal fun getVideoThumbnail(retriever: MediaMetadataRetriever): Bitmap? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            return retriever.getScaledFrameAtTime(-1, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+        }
+        val frame = retriever.getFrameAtTime(-1, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return null
+        var thumbnail: Bitmap? = null
+        try {
+            val scale = minOf(THUMBNAIL_WIDTH.toFloat() / frame.width, THUMBNAIL_HEIGHT.toFloat() / frame.height)
+            val width = maxOf(1, (frame.width * scale).toInt())
+            val height = maxOf(1, (frame.height * scale).toInt())
+            thumbnail = if (width == frame.width && height == frame.height) frame else Bitmap.createScaledBitmap(frame, width, height, true)
+            return thumbnail
+        } finally {
+            if (thumbnail !== frame) frame.recycle()
+        }
+    }
 
     // The constant Telephony.Mms.Part.CONTENT_URI was added in API 29
     val mMSPartUri : Uri = "content://mms/part/".toUri()
@@ -602,12 +621,7 @@ object SMSHelper {
                                     context,
                                     ContentUris.withAppendedId(mMSPartUri, partID)
                                 )
-                                val videoThumbnail = retriever.getScaledFrameAtTime(
-                                    -1,
-                                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                                    THUMBNAIL_WIDTH,
-                                    THUMBNAIL_HEIGHT
-                                )
+                                val videoThumbnail = getVideoThumbnail(retriever)
                                 if (videoThumbnail != null) {
                                     val encodedThumbnail = SmsMmsUtils.bitMapToBase64(videoThumbnail)
                                     attachments.add(

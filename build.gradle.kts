@@ -323,6 +323,9 @@ dependencies {
     testImplementation(libs.jsonassert)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    // Align Compose's older transitive Espresso with the SDK 37-compatible AndroidX Test driver.
+    testImplementation(libs.androidx.espresso.core)
 
     // For device controls
     implementation(libs.reactive.streams)

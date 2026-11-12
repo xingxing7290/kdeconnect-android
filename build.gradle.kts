@@ -94,6 +94,9 @@ android {
             isShrinkResources = true
         }
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
     lint {
         abortOnError = false
         checkReleaseBuilds = false

@@ -96,6 +96,32 @@ class PanelSessionTest {
     }
 
     @Test
+    fun configurationUpdatesPreserveValidRuntimePageButRespectExplicitPageChanges() {
+        val session = readySession()
+        assertTrue(session.receiveState(7, "editor", ""))
+        val renamed = fixture().copy(revision = 8, pages = fixture().pages.map { it.copy(name = it.name + " updated") })
+        assertTrue(session.receiveConfig(renamed.encode()))
+        assertEquals("editor", session.state.value.activePageId)
+        assertTrue(session.receiveConfig(renamed.copy(revision = 9, activePageId = "editor").encode()))
+        assertTrue(session.receiveConfig(renamed.copy(revision = 10, activePageId = "home").encode()))
+        assertEquals("home", session.state.value.activePageId)
+        assertTrue(session.receiveState(10, "editor", ""))
+        val removed = renamed.copy(revision = 11, pages = renamed.pages.filterNot { it.id == "editor" })
+        assertTrue(session.receiveConfig(removed.encode()))
+        assertEquals("home", session.state.value.activePageId)
+    }
+
+    @Test
+    fun reconnectDoesNotReuseRuntimePageBeforeFreshConfiguration() {
+        val session = readySession()
+        assertTrue(session.receiveState(7, "editor", ""))
+        session.disconnected()
+        session.connected()
+        assertTrue(session.receiveConfig(fixture().encode()))
+        assertEquals("home", session.state.value.activePageId)
+    }
+
+    @Test
     fun timeoutsReleasePendingButtonWithoutRetrying() {
         var clock = 0L
         val session = PanelSession(elapsedMillis = { clock }, newRequestId = { "request-1" })

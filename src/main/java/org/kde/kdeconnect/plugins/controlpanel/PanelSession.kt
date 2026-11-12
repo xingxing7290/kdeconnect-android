@@ -136,6 +136,9 @@ class PanelSession(
             if (config.revision == current.config.revision && config != current.config) return false
         }
         val sameConfig = hasSessionConfig && config == current.config
+        val keepCurrentPage = hasSessionConfig && current.config?.let { previous ->
+            previous.mode == config.mode && previous.activePageId == config.activePageId && config.page(current.activePageId) != null
+        } == true
         if (config != current.config || current.connection != PanelConnection.READY) pending.clear()
         hasSessionConfig = true
         mutableState.value = current.copy(
@@ -145,6 +148,7 @@ class PanelSession(
             activePageId = when {
                 config.mode == "single" -> config.homePageId
                 sameConfig -> current.activePageId
+                keepCurrentPage -> current.activePageId
                 else -> config.activePageId
             },
             pendingButtons = pending.values.map { it.request.buttonId }.toSet(),

@@ -136,7 +136,7 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 PanelDialText(wakeDescription, Modifier.weight(1f), color = if (light) Color(0xFF626C62) else Color(0xFF8391A5), fontSize = 11.sp)
-                if (connection != PanelConnection.READY) PanelDialText(stringResource(R.string.control_panel_offline), color = Color(0xFFC06B66), fontSize = 11.sp)
+                if (connection != PanelConnection.READY) PanelDialText(stringResource(R.string.control_panel_offline), color = if (light) Color(0xFF9B403A) else Color(0xFFC06B66), fontSize = 11.sp)
             }
         }
     }

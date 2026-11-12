@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 internal fun PanelInformationDial(options: PanelIdle, now: Calendar, weather: PanelWeatherSnapshot?, modifier: Modifier) {
     val battery = rememberPanelBatteryState()
     val ink = Color(0xFF202722)
-    val quiet = ink.copy(alpha = 0.62f)
+    val quiet = Color(0xFF5F655F)
     val seconds = now.timeInMillis / 1000
     val fresh = weather?.fresh(seconds) == true && weather.status !in setOf("disabled", "no_city")
     val days = weather?.forecastDays(seconds).orEmpty()
@@ -124,7 +124,7 @@ private fun PanelCompactInformationDial(options: PanelIdle, now: Calendar, weath
     val seconds = now.timeInMillis / 1000
     val fresh = weather?.fresh(seconds) == true && weather.status !in setOf("disabled", "no_city")
     val days = weather?.forecastDays(seconds).orEmpty()
-    val quiet = ink.copy(alpha = 0.62f)
+    val quiet = Color(0xFF5F655F)
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PanelDialText(SimpleDateFormat("HH:mm:ss", locale).format(now.time), Modifier.weight(1f), color = ink, fontSize = 28.sp, lineHeight = 32.sp,

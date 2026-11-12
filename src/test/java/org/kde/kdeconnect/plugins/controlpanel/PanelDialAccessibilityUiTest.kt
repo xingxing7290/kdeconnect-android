@@ -12,6 +12,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -26,6 +28,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.core.os.ConfigurationCompat
+import androidx.core.graphics.ColorUtils
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -87,13 +90,20 @@ class PanelDialAccessibilityUiTest {
         val screen = compose.onNodeWithTag("panel-dial-$dial", useUnmergedTree = true)
         val root = screen.fetchSemanticsNode().boundsInRoot
         assertTrue("The test must exercise a phone-sized landscape surface", root.width > root.height && root.width / root.height < 3f)
-        System.getenv("KDECONNECT_PANEL_SCREENSHOTS")?.let { directory ->
-            val content = requireNotNull(controller).get().findViewById<ViewGroup>(android.R.id.content)
-            val bitmap = Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888)
-            compose.runOnIdle { content.draw(Canvas(bitmap)) }
-            val file = File(directory, "dial-$dial-font$scale-sdk${android.os.Build.VERSION.SDK_INT}$variant.png")
-            check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true)
-            file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        val content = requireNotNull(controller).get().findViewById<ViewGroup>(android.R.id.content)
+        val bitmap = Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888)
+        compose.runOnIdle { content.draw(Canvas(bitmap)) }
+        val background = bitmap.getPixel(0, 0)
+        try {
+            assertEquals("The dial background must be opaque", 255, android.graphics.Color.alpha(background))
+            for ((x, y) in listOf(0 to bitmap.height - 1, bitmap.width - 1 to 0, bitmap.width - 1 to bitmap.height - 1))
+                assertEquals("Current dial contrast checks require the actual flat background", background, bitmap.getPixel(x, y))
+            System.getenv("KDECONNECT_PANEL_SCREENSHOTS")?.let { directory ->
+                val file = File(directory, "dial-$dial-font$scale-sdk${android.os.Build.VERSION.SDK_INT}$variant.png")
+                check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true)
+                file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            }
+        } finally {
             bitmap.recycle()
         }
         val texts = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
@@ -117,12 +127,18 @@ class PanelDialAccessibilityUiTest {
             for (day in 0..2) compose.onNodeWithTag("panel-forecast-$day", useUnmergedTree = true).assertIsDisplayed()
         }
         val problems = mutableListOf<String>()
+        val contrasts = mutableListOf("text\tforegroundARGB\tbackgroundARGB\tcontrast")
         for (node in texts) {
             val layouts = mutableListOf<TextLayoutResult>()
             node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
             val layout = layouts.single()
             val bounds = node.boundsInRoot
             val label = layout.layoutInput.text.text.take(35)
+            val foreground = layout.layoutInput.style.color
+            assertNotEquals("Each text must expose its effective foreground", Color.Unspecified, foreground)
+            val contrast = ColorUtils.calculateContrast(foreground.toArgb(), background)
+            contrasts += "${layout.layoutInput.text.text.replace('\t', ' ').replace('\n', ' ')}\t${foreground.toArgb().toUInt().toString(16)}\t${background.toUInt().toString(16)}\t$contrast"
+            if (contrast < 4.5) problems += "$label: contrast $contrast is below 4.5"
             if (layout.lineCount < 1 || bounds.height < layout.getLineBottom(layout.lineCount - 1) - 1f)
                 problems += "$label: displayed lines are clipped (${bounds.height} px, ${layout.size.height} px layout)"
             if (bounds.left < root.left - 1f || bounds.right > root.right + 1f || bounds.top < root.top - 1f || bounds.bottom > root.bottom + 1f)
@@ -132,6 +148,11 @@ class PanelDialAccessibilityUiTest {
                 ((singleValue && layout.lineCount != 1) || layout.getLineEnd(layout.lineCount - 1, visibleEnd = true) != layout.layoutInput.text.length ||
                     (0 until layout.lineCount).any { layout.isLineEllipsized(it) || layout.getLineRight(it) - layout.getLineLeft(it) > bounds.width + 1f }))
                 problems += "$label: essential characters do not fit"
+        }
+        System.getenv("KDECONNECT_PANEL_CONTRAST_REPORTS")?.let { directory ->
+            val file = File(directory, "contrast-$dial-font$scale-sdk${android.os.Build.VERSION.SDK_INT}$variant.tsv")
+            check(file.parentFile?.isDirectory == true || file.parentFile?.mkdirs() == true)
+            file.writeText(contrasts.joinToString("\n"))
         }
         for (first in texts.indices) for (second in first + 1 until texts.size) {
             val a = texts[first].boundsInRoot
@@ -159,6 +180,18 @@ class PanelDialAccessibilityUiTest {
     @Test fun weatherAtDoubleScaleKeepsAllTextReadable() { open("weather", 2f); assertReadable("weather", 2f) }
     @Test fun informationAtDoubleScaleKeepsAllTextReadable() { open("info", 2f); assertReadable("info", 2f) }
     @Test fun carAtDoubleScaleKeepsAllTextReadable() { open("car", 2f); assertReadable("car", 2f) }
+    @Test fun offlineInformationKeepsReadableColorsAndAnAccessibleWakeAction() {
+        open("info", 2f)
+        compose.runOnIdle { connection.value = PanelConnection.DISCONNECTED }
+        assertReadable("info", 2f, "-offline-color")
+    }
+    @Test fun contrastCalculationIncludesAlphaAndDoesNotRoundUpThresholds() {
+        assertEquals(21.0, ColorUtils.calculateContrast(0xFF000000.toInt(), 0xFFFFFFFF.toInt()), 0.000001)
+        assertEquals(1.0, ColorUtils.calculateContrast(0xFF777777.toInt(), 0xFF777777.toInt()), 0.000001)
+        assertTrue(ColorUtils.calculateContrast(0xFF777777.toInt(), 0xFFFFFFFF.toInt()) < 4.5)
+        val translucent = ColorUtils.calculateContrast(0x7F000000, 0xFFFFFFFF.toInt())
+        assertTrue(translucent > 3.9 && translucent < 4.1)
+    }
     @Test fun allFiveAtDefaultScaleKeepAllTextReadable() {
         open("digital", 1f)
         for (dial in listOf("digital", "analog", "weather", "info", "car")) {

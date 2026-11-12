@@ -41,4 +41,15 @@
     <string name="control_panel_volume">音量</string>
     <string name="control_panel_mute">静音</string>
     <string name="control_panel_unmute">取消静音</string>
+    <string name="control_panel_error_timeout">未收到电脑确认，请检查连接后重新同步。</string>
+    <string name="control_panel_error_version">请将两端更新到相互兼容的控制面板版本。</string>
+    <string name="control_panel_error_config">电脑配置暂不可用，请在桌面编辑器中检查。</string>
+    <string name="control_panel_error_changed">电脑配置已变化，请重新同步后再操作。</string>
+    <string name="control_panel_error_target">无法打开目标，请在电脑端检查文件位置和访问权限。</string>
+    <string name="control_panel_error_command">请在电脑端启用远程命令，并检查对应命令是否已配置。</string>
+    <string name="control_panel_error_permission">电脑拒绝了此操作，请检查配对和权限，不要关闭系统防护。</string>
+    <string name="control_panel_error_keyboard">请先选中电脑窗口，并松开已按住的修饰键后再试。</string>
+    <string name="control_panel_error_platform">电脑当前平台暂不支持此操作。</string>
+    <string name="control_panel_error_busy">上一次请求尚未完成，请等待电脑确认后再操作。</string>
+    <string name="control_panel_error_detail">请检查电脑并重新同步。详细信息：%1$s</string>
 </resources>

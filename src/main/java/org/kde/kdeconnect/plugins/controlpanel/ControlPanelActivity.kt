@@ -22,6 +22,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.kde.kdeconnect.Device
+import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.plugins.systemvolume.SystemVolumePlugin
 import org.kde.kdeconnect.ui.compose.KdeTheme
@@ -58,7 +59,12 @@ class ControlPanelActivity : AppCompatActivity() {
                 LaunchedEffect(state.config?.idle) { idle.configure(state.config?.idle) }
                 if (showing && state.config != null) {
                     PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() }, weather = state.weather)
-                } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume, onBack = { finish() }, assetCache = PanelAssetCache.get(this))
+                } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume,
+                    onBack = { finish() }, assetCache = PanelAssetCache.get(this), onSynchronize = {
+                        val current = plugin
+                        if (current != null && device?.isReachable == true) current.synchronize()
+                        else BackgroundService.ForceRefreshConnections(this)
+                    })
             }
         }
     }

@@ -41,4 +41,15 @@
     <string name="control_panel_volume">Volume</string>
     <string name="control_panel_mute">Mute</string>
     <string name="control_panel_unmute">Unmute</string>
+    <string name="control_panel_error_timeout">No confirmation from the computer. Check its connection and try synchronizing again.</string>
+    <string name="control_panel_error_version">Update both devices to compatible control panel versions.</string>
+    <string name="control_panel_error_config">The computer configuration is unavailable. Check it in the desktop editor.</string>
+    <string name="control_panel_error_changed">The computer configuration changed. Synchronize before trying again.</string>
+    <string name="control_panel_error_target">The target could not be opened. Check its location and access permissions on the computer.</string>
+    <string name="control_panel_error_command">Enable Run Command and check the configured command on the computer.</string>
+    <string name="control_panel_error_permission">The computer denied this action. Check pairing and permissions without disabling system protection.</string>
+    <string name="control_panel_error_keyboard">Select a computer window and release held modifier keys before trying again.</string>
+    <string name="control_panel_error_platform">This action is not available on the computer platform.</string>
+    <string name="control_panel_error_busy">Another request is still pending. Wait for confirmation before trying again.</string>
+    <string name="control_panel_error_detail">Check the computer and synchronize again. Details: %1$s</string>
 </resources>

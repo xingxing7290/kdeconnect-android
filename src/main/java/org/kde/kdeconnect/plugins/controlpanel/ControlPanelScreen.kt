@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -66,6 +67,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,6 +93,7 @@ fun ControlPanelScreen(
     volume: SystemVolumePlugin?,
     onBack: () -> Unit,
     assetCache: PanelAssetCache? = null,
+    onSynchronize: (() -> Unit)? = null,
 ) {
     val empty = remember { MutableStateFlow(PanelSessionState()) }
     val state by (session?.state ?: empty).collectAsState()
@@ -122,18 +126,20 @@ fun ControlPanelScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, stringResource(R.string.control_panel_back)) }
             Text(deviceName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color(0xFF25334A))
-            if (!ready) {
-                Text(
-                    when (state.connection) {
-                        PanelConnection.SYNCING -> stringResource(R.string.control_panel_syncing)
-                        PanelConnection.ERROR -> state.error
-                        else -> stringResource(R.string.control_panel_offline)
-                    }, color = Color(0xFFB3261E), fontSize = 12.sp,
-                )
-            }
-            IconButton(onClick = { plugin?.synchronize() }, enabled = plugin != null) {
+            IconButton(onClick = { onSynchronize?.invoke() ?: plugin?.synchronize() }, enabled = plugin != null || onSynchronize != null) {
                 Icon(Icons.Default.Refresh, stringResource(R.string.control_panel_retry))
             }
+        }
+        if (!ready) {
+            Text(
+                when (state.connection) {
+                    PanelConnection.SYNCING -> stringResource(R.string.control_panel_syncing)
+                    PanelConnection.ERROR -> panelErrorMessage(state.error)
+                    else -> stringResource(R.string.control_panel_offline)
+                },
+                modifier = Modifier.fillMaxWidth().testTag("panel-connection-message").semantics { liveRegion = LiveRegionMode.Polite },
+                color = Color(0xFFB3261E), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
         }
         if (config?.mode == "follow" && state.foregroundApplication.isNotEmpty()) {
             Text(
@@ -159,8 +165,9 @@ fun ControlPanelScreen(
                                     .alpha(if (ready || button == null) 1f else 0.5f)
                                     .semantics { contentDescription = slotDescription; if (!canActivate) disabled() },
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (button == null) Color(0x338292AC) else Color.White.copy(alpha = 0.86f),
-                                shadowElevation = if (button == null) 0.dp else 1.dp,
+                                color = Color(0xFFFBFCFE),
+                                border = BorderStroke(1.dp, Color(0xFFDCE1E8)),
+                                shadowElevation = 1.dp,
                             ) {
                                 Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     if (button == null) Text("+", color = Color(0xFF9BA5B4), fontSize = 28.sp)
@@ -186,9 +193,30 @@ fun ControlPanelScreen(
             if (page?.slots?.all { it == null } != false) Text(stringResource(R.string.control_panel_empty), fontSize = 12.sp, color = Color(0xFF69778B))
         }
         state.lastResult?.let { result ->
-            if (!result.success) Text(stringResource(R.string.control_panel_failed, result.error), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            if (ready) Text(
+                if (result.success) stringResource(R.string.control_panel_success)
+                else stringResource(R.string.control_panel_failed, panelErrorMessage(result.error)),
+                modifier = Modifier.fillMaxWidth().testTag("panel-action-result").semantics { liveRegion = LiveRegionMode.Polite },
+                color = if (result.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
         }
     }
+}
+
+@Composable
+private fun panelErrorMessage(error: String): String = when (error) {
+    "sync_timeout", "send_failed", "confirmation_timeout" -> stringResource(R.string.control_panel_error_timeout)
+    "unsupported_version" -> stringResource(R.string.control_panel_error_version)
+    "invalid_config", "config_unavailable" -> stringResource(R.string.control_panel_error_config)
+    "stale_revision", "unknown_button", "unknown_page", "invalid_session" -> stringResource(R.string.control_panel_error_changed)
+    "target_missing", "launch_failed" -> stringResource(R.string.control_panel_error_target)
+    "command_unavailable", "unknown_command" -> stringResource(R.string.control_panel_error_command)
+    "permission_denied", "not_paired" -> stringResource(R.string.control_panel_error_permission)
+    "modifiers_held", "no_foreground_window" -> stringResource(R.string.control_panel_error_keyboard)
+    "unsupported_platform" -> stringResource(R.string.control_panel_error_platform)
+    "busy", "request_pending", "rate_limited" -> stringResource(R.string.control_panel_error_busy)
+    else -> stringResource(R.string.control_panel_error_detail, error)
 }
 
 @Composable

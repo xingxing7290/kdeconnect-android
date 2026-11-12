@@ -8,7 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
+import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.os.ConfigurationCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +56,15 @@ data class PanelClockAngles(val hour: Float, val minute: Float, val second: Floa
 internal fun panelDisplayLocale(): Locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT
 
 @Composable
+internal fun PanelDialText(text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified, fontSize: TextUnit,
+    fontFamily: FontFamily? = null, fontWeight: FontWeight? = null, maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip, lineHeight: TextUnit = fontSize * 1.25f) {
+    // Keep fitted dial typography independent of the Material body line height.
+    MaterialText(text, modifier, color = color, fontSize = fontSize, fontFamily = fontFamily, fontWeight = fontWeight,
+        maxLines = maxLines, overflow = overflow, lineHeight = lineHeight)
+}
+
+@Composable
 fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () -> Unit, weather: PanelWeatherSnapshot? = null) {
     var now by remember { mutableStateOf(Calendar.getInstance()) }
     LaunchedEffect(Unit) {
@@ -78,67 +88,99 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
         Modifier.fillMaxSize().background(if (light) Color(0xFFECEEE8) else Color.Black)
             .clickable(onClickLabel = wakeDescription, onClick = onWake)
             .semantics { contentDescription = wakeDescription }.testTag("panel-dial-${options.dialId}")
-            .safeDrawingPadding().padding(24.dp),
+            .safeDrawingPadding(),
     ) {
-        val timeSize = minOf(maxWidth.value * 0.23f, maxHeight.value * 0.56f).sp
-        val carTimeSize = minOf(maxWidth.value * 0.12f, maxHeight.value * 0.3f).sp
-        val inner = Modifier.fillMaxSize().padding(bottom = 25.dp)
-        when (options.dialId) {
-            "analog" -> {
-                PanelAnalogClock(now, inner)
-                Text(date, Modifier.align(Alignment.BottomCenter).padding(bottom = 25.dp), color = ink, fontSize = 13.sp)
-            }
-            "weather" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                PanelAnalogClock(now, Modifier.weight(1f).fillMaxHeight(), circular = true)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(cityLabel, color = ink, fontSize = 24.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    PanelWeatherReadout(snapshot, now.timeInMillis / 1000, ink, 64.sp)
-                    Text(date, color = ink, fontSize = 14.sp)
-                    DialMessage(options.message, ink)
+        val compact = maxHeight.value / LocalDensity.current.fontScale < 240f
+        val padding = if (compact) 12.dp else 24.dp
+        val width = (maxWidth.value - 2 * padding.value).coerceAtLeast(0f)
+        val height = (maxHeight.value - 2 * padding.value).coerceAtLeast(0f)
+        val timeSize = minOf(width * 0.23f, height * 0.56f).sp
+        val carTimeSize = minOf(width * 0.12f, height * 0.3f).sp
+        val weatherCompact = compact || height < 400f
+        Column(Modifier.fillMaxSize().padding(padding), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                val inner = Modifier.fillMaxSize()
+                when (options.dialId) {
+                    "analog" -> Column(inner, horizontalAlignment = Alignment.CenterHorizontally) {
+                        PanelAnalogClock(now, Modifier.fillMaxWidth().weight(1f))
+                        PanelDialText(date, color = ink, fontSize = 13.sp)
+                    }
+                    "weather" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 24.dp)) {
+                        PanelAnalogClock(now, Modifier.weight(if (compact) 0.75f else 1f).fillMaxHeight(), circular = true)
+                        Column(Modifier.weight(if (compact) 1.25f else 1f), verticalArrangement = Arrangement.spacedBy(if (weatherCompact) 4.dp else 12.dp)) {
+                            PanelDialText(cityLabel, color = ink, fontSize = if (compact) 18.sp else 24.sp, maxLines = if (weatherCompact) 1 else 2, overflow = TextOverflow.Ellipsis)
+                            PanelWeatherReadout(snapshot, now.timeInMillis / 1000, ink, if (compact) 32.sp else if (weatherCompact) 48.sp else 64.sp, weatherCompact)
+                            PanelDialText(date, color = ink, fontSize = if (compact) 12.sp else 14.sp)
+                            DialMessage(options.message, ink, weatherCompact)
+                        }
+                    }
+                    "info" -> PanelInformationDial(options, now, snapshot, inner)
+                    "car" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        PanelCarArt(Modifier.weight(1.2f).fillMaxHeight())
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 12.dp)) {
+                            PanelDialText(time, color = accent, fontSize = carTimeSize, fontFamily = FontFamily.Monospace)
+                            PanelDialText(date, color = ink, fontSize = if (compact) 12.sp else 16.sp)
+                            DialMessage(options.message, ink, compact)
+                            PanelDialText(stringResource(R.string.control_panel_dial_car_art), color = Color(0xFF8391A5), fontSize = 11.sp, maxLines = 2)
+                        }
+                    }
+                    else -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        PanelDialText(time, color = accent, fontSize = timeSize, fontWeight = FontWeight.Light, maxLines = 1)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 14.dp)) {
+                            PanelDialText(date, color = ink, fontSize = if (compact) 12.sp else 20.sp)
+                            if (options.city.isNotBlank()) PanelWeatherReadout(snapshot, now.timeInMillis / 1000, ink, 28.sp, compact)
+                            DialMessage(options.message, ink, compact)
+                        }
+                    }
                 }
             }
-            "info" -> PanelInformationDial(options, now, snapshot, inner)
-            "car" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                PanelCarArt(Modifier.weight(1.2f).fillMaxHeight())
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(time, color = accent, fontSize = carTimeSize, fontFamily = FontFamily.Monospace)
-                    Text(date, color = ink, fontSize = 16.sp)
-                    DialMessage(options.message, ink)
-                    Text(stringResource(R.string.control_panel_dial_car_art), color = Color(0xFF8391A5), fontSize = 11.sp)
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                PanelDialText(wakeDescription, Modifier.weight(1f), color = if (light) Color(0xFF626C62) else Color(0xFF8391A5), fontSize = 11.sp)
+                if (connection != PanelConnection.READY) PanelDialText(stringResource(R.string.control_panel_offline), color = Color(0xFFC06B66), fontSize = 11.sp)
             }
-            else -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Text(time, color = accent, fontSize = timeSize, fontWeight = FontWeight.Light, maxLines = 1)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(date, color = ink, fontSize = 20.sp)
-                    if (options.city.isNotBlank()) PanelWeatherReadout(snapshot, now.timeInMillis / 1000, ink, 28.sp)
-                    DialMessage(options.message, ink)
-                }
-            }
-        }
-        Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(wakeDescription, color = if (light) Color(0xFF626C62) else Color(0xFF8391A5), fontSize = 11.sp)
-            if (connection != PanelConnection.READY) Text(stringResource(R.string.control_panel_offline), color = Color(0xFFC06B66), fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-private fun PanelWeatherReadout(snapshot: PanelWeatherSnapshot?, now: Long, ink: Color, temperatureSize: TextUnit) {
+private fun PanelWeatherReadout(snapshot: PanelWeatherSnapshot?, now: Long, ink: Color, temperatureSize: TextUnit, compact: Boolean = false) {
     val fresh = snapshot?.fresh(now) == true && snapshot.status !in setOf("disabled", "no_city")
     val status = panelWeatherStatus(snapshot, now)
+    val today = snapshot?.forecastDays(now)?.firstOrNull()?.takeIf { it.date == PanelWeatherSnapshot.dateAtOffset(now, snapshot.utcOffsetSeconds ?: 0) }
+    val temperature = if (fresh) "${checkNotNull(snapshot.temperature).roundToInt()}°C" else "--°C"
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(if (fresh) "${checkNotNull(snapshot.temperature).roundToInt()}°C" else "--°C", color = ink, fontSize = temperatureSize, fontWeight = FontWeight.Light, modifier = Modifier.testTag("panel-weather-temperature"))
-        Text(status, color = ink, fontSize = 13.sp, modifier = Modifier.testTag("panel-weather-status"))
-        val today = snapshot?.forecastDays(now)?.firstOrNull()?.takeIf { it.date == PanelWeatherSnapshot.dateAtOffset(now, snapshot.utcOffsetSeconds ?: 0) }
-        if (today != null) Text(stringResource(R.string.control_panel_forecast_range, today.minimum.roundToInt(), today.maximum.roundToInt()), color = ink, fontSize = 13.sp)
-        Text(stringResource(R.string.control_panel_weather_source), color = ink.copy(alpha = 0.65f), fontSize = 10.sp)
-        if (snapshot?.hasObservation == true) {
-            val formatter = SimpleDateFormat("MM-dd HH:mm", panelDisplayLocale())
-            Text(stringResource(R.string.control_panel_weather_updated,
-                formatter.format(Date(checkNotNull(snapshot.observedAt) * 1000)),
-                formatter.format(Date(checkNotNull(snapshot.fetchedAt) * 1000))), color = ink.copy(alpha = 0.65f), fontSize = 10.sp, maxLines = 2)
+        if (compact) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PanelDialText(temperature, color = ink, fontSize = temperatureSize, lineHeight = temperatureSize * 1.2f, fontWeight = FontWeight.Light,
+                maxLines = 1, modifier = Modifier.testTag("panel-weather-temperature"))
+            Column(Modifier.weight(1f)) {
+                PanelDialText(status, color = ink, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("panel-weather-status"))
+                if (today != null) PanelDialText(stringResource(R.string.control_panel_forecast_range, today.minimum.roundToInt(), today.maximum.roundToInt()), color = ink, fontSize = 13.sp)
+            }
+        } else {
+            PanelDialText(temperature, color = ink, fontSize = temperatureSize, fontWeight = FontWeight.Light, modifier = Modifier.testTag("panel-weather-temperature"))
+            PanelDialText(status, color = ink, fontSize = 13.sp, modifier = Modifier.testTag("panel-weather-status"))
+            if (today != null) PanelDialText(stringResource(R.string.control_panel_forecast_range, today.minimum.roundToInt(), today.maximum.roundToInt()), color = ink, fontSize = 13.sp)
         }
+        PanelWeatherAttribution(snapshot, ink, compact = compact)
+    }
+}
+
+@Composable
+internal fun PanelWeatherAttribution(snapshot: PanelWeatherSnapshot?, ink: Color, compact: Boolean = false, showTimezone: Boolean = false) {
+    val source = stringResource(R.string.control_panel_weather_source) + if (showTimezone) snapshot?.timezone?.let { " · $it" }.orEmpty() else ""
+    val updated = if (snapshot?.hasObservation == true) {
+        val formatter = SimpleDateFormat("MM-dd HH:mm", panelDisplayLocale())
+        stringResource(R.string.control_panel_weather_updated,
+            formatter.format(Date(checkNotNull(snapshot.observedAt) * 1000)),
+            formatter.format(Date(checkNotNull(snapshot.fetchedAt) * 1000)))
+    } else null
+    val quiet = ink.copy(alpha = 0.65f)
+    if (compact) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        PanelDialText(source, Modifier.weight(0.3f), color = quiet, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (updated != null) PanelDialText(updated, Modifier.weight(0.7f), color = quiet, fontSize = 9.sp, maxLines = 3)
+    } else Column {
+        PanelDialText(source, color = quiet, fontSize = 10.sp)
+        if (updated != null) PanelDialText(updated, color = quiet, fontSize = 10.sp, maxLines = 2)
     }
 }
 
@@ -171,8 +213,8 @@ internal fun weatherDescription(code: Int?) = when (code) {
 }
 
 @Composable
-private fun DialMessage(message: String, color: Color) {
-    if (message.isNotBlank()) Text(message, color = color, fontSize = 18.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+private fun DialMessage(message: String, color: Color, compact: Boolean = false) {
+    if (message.isNotBlank()) PanelDialText(message, color = color, fontSize = if (compact) 12.sp else 18.sp, maxLines = if (compact) 1 else 3, overflow = TextOverflow.Ellipsis)
 }
 
 @Composable

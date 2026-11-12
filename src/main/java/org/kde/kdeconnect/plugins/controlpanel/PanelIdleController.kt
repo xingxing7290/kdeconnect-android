@@ -31,6 +31,7 @@ class PanelIdleController(private val elapsedMillis: () -> Long) {
         timeout = nextTimeout
     }
     fun setActive(value: Boolean) {
+        if (active == value) return
         active = value
         mutableShowing.value = false
         touching = false; wakingTouch = false; heldKeys.clear(); wakingKeys.clear()

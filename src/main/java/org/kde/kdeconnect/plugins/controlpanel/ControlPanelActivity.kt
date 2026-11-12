@@ -34,6 +34,8 @@ class ControlPanelActivity : AppCompatActivity() {
         override fun run() { idle.tick(); idleHandler.postDelayed(this, 200) }
     }
     private var device: Device? = null
+    private var resumed = false
+    private var windowFocused: Boolean? = null
     private var plugin by mutableStateOf<ControlPanelPlugin?>(null)
     private var volume by mutableStateOf<SystemVolumePlugin?>(null)
     private var displaySession by mutableStateOf<PanelSession?>(null)
@@ -72,13 +74,20 @@ class ControlPanelActivity : AppCompatActivity() {
     private val emptySession = PanelSession()
     override fun onResume() {
         super.onResume()
-        idle.setActive(true)
+        resumed = true
+        idle.setActive(windowFocused != false)
         idleHandler.post(idleTick)
     }
     override fun onPause() {
+        resumed = false
         idleHandler.removeCallbacks(idleTick)
         idle.setActive(false)
         super.onPause()
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        windowFocused = hasFocus
+        idle.setActive(resumed && hasFocus)
     }
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         val phase = when (event.actionMasked) {

@@ -59,6 +59,29 @@ class PanelIdleControllerTest {
         time += 4999; controller.tick(); assertFalse(controller.showing.value)
         time++; controller.tick(); assertTrue(controller.showing.value)
     }
+    @Test fun duplicateActiveNotificationsDoNotDismissDialOrLoseInputGates() {
+        start(); idle()
+        controller.setActive(true)
+        assertTrue(controller.showing.value)
+        assertTrue(controller.touch(PanelIdleController.Touch.START))
+        controller.setActive(true)
+        assertTrue(controller.touch(PanelIdleController.Touch.END))
+        assertFalse(controller.touch(PanelIdleController.Touch.START))
+        controller.setActive(true)
+        time += 10_000; controller.tick(); assertFalse(controller.showing.value)
+        assertFalse(controller.touch(PanelIdleController.Touch.END))
+        time += 5000; controller.tick(); assertTrue(controller.showing.value)
+    }
+    @Test fun focusLossReleasesUnfinishedKeyAndTouchBeforeAFullNewDeadline() {
+        start()
+        assertFalse(controller.key(29, true))
+        assertFalse(controller.touch(PanelIdleController.Touch.START))
+        controller.setActive(false)
+        time += 60_000; controller.tick(); assertFalse(controller.showing.value)
+        controller.setActive(true)
+        time += 4999; controller.tick(); assertFalse(controller.showing.value)
+        time++; controller.tick(); assertTrue(controller.showing.value)
+    }
     @Test fun disablingAndTimeoutChangesDismissButDialChangesDoNot() {
         start(); idle()
         controller.configure(options(dial = "analog"))

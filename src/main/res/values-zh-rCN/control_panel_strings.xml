@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_panel_local_battery">本机电量</string>
+    <string name="control_panel_info_message_hint">可在电脑端设置个性化文本</string>
+    <string name="control_panel_forecast_unavailable">预报待更新</string>
+    <string name="control_panel_forecast_range">最低 %1$d° · 最高 %2$d°</string>
     <string name="control_panel_weather_disabled">空闲天气已关闭</string>
     <string name="control_panel_weather_stale">天气数据已过期</string>
     <string name="control_panel_weather_loading">正在更新天气</string>

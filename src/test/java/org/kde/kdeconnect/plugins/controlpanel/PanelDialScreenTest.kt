@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.core.os.ConfigurationCompat
 import java.io.File
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
@@ -23,7 +24,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(AndroidJUnit4::class)
-@Config(sdk = [28], qualifiers = "w1000dp-h600dp-land")
+@Config(sdk = [28], qualifiers = "zh-rCN-w1000dp-h600dp-land")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PanelDialScreenTest {
     @Test fun allFiveDialsRenderWithoutDeviceOrInventedWeather() {
@@ -34,6 +35,7 @@ class PanelDialScreenTest {
             val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
             try {
                 val activity = controller.get()
+                assertEquals("zh", ConfigurationCompat.getLocales(activity.resources.configuration)[0]?.language)
                 activity.setContent {
                     MaterialTheme { PanelDialScreen(PanelIdle(true, 5000, dial, observation?.city ?: "长沙市", "Stay curious"), PanelConnection.READY, {}, observation) }
                 }

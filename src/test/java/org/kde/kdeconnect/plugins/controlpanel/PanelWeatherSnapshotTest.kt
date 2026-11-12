@@ -82,4 +82,47 @@ class PanelWeatherSnapshotTest {
         assertFalse(session.receiveWeather(7, raw(), now))
         assertEquals(PanelConnection.READY, session.state.value.connection)
     }
+    private fun forecastSnapshot(offset: Int = 28_800): PanelWeatherSnapshot {
+        val days = (0..2).map { day -> PanelForecastDay(PanelWeatherSnapshot.dateAtOffset(now + day * 86_400, offset), 11.5, 20.5, 3) }
+        return snapshot().copy(timezone = "Asia/Shanghai", utcOffsetSeconds = offset, forecast = days)
+    }
+    @Test fun forecastDatesUseWeatherCityOffsetAndAreStrictlyValidated() {
+        for (offset in listOf(-43_200, -12_600, 0, 20_700, 28_800, 50_400)) {
+            val expected = forecastSnapshot(offset)
+            val parsed = checkNotNull(PanelWeatherSnapshot.parse(expected.encode()))
+            assertEquals(expected, parsed)
+            assertEquals(3, parsed.forecastDays(now).size)
+            assertEquals(PanelWeatherSnapshot.dateAtOffset(now, offset), parsed.forecast.first().date)
+            assertTrue(parsed.forecastDays(now + 7201).isEmpty())
+        }
+        val valid = forecastSnapshot()
+        assertNull(PanelWeatherSnapshot.parse(valid.copy(forecast = valid.forecast.take(2)).encode()))
+        assertNull(PanelWeatherSnapshot.parse(valid.copy(utcOffsetSeconds = 50_401).encode()))
+        assertNull(PanelWeatherSnapshot.parse(valid.copy(timezone = "").encode()))
+        for (bad in listOf(
+            valid.forecast[0].copy(date = "2026-02-30"),
+            valid.forecast[0].copy(date = valid.forecast[1].date),
+            valid.forecast[0].copy(minimum = 40.0),
+            valid.forecast[0].copy(maximum = 70.1),
+            valid.forecast[0].copy(weatherCode = 4),
+        )) assertNull(PanelWeatherSnapshot.parse(valid.copy(forecast = listOf(bad) + valid.forecast.drop(1)).encode()))
+        val body = JsonHelper.json.parseToJsonElement(valid.encode()).jsonObject.toMutableMap()
+        body["utcOffsetSeconds"] = JsonPrimitive("28800")
+        assertNull(PanelWeatherSnapshot.parse(JsonObject(body).toString()))
+        body["utcOffsetSeconds"] = JsonPrimitive(28800)
+        val days = body.getValue("forecast").jsonArray.toMutableList()
+        days[0] = JsonObject(days[0].jsonObject.toMutableMap().apply { put("minimum", JsonPrimitive("11.5")) })
+        body["forecast"] = JsonArray(days)
+        assertNull(PanelWeatherSnapshot.parse(JsonObject(body).toString()))
+    }
+    @Test fun forecastIsCachedWithItsObservationAndOldPeersRemainSupported() {
+        assertNotNull(PanelWeatherSnapshot.parse(raw()))
+        val session = ready()
+        val valid = forecastSnapshot()
+        assertTrue(session.receiveWeather(7, valid.encode(), now))
+        assertTrue(session.receiveWeather(7, PanelWeatherSnapshot("长沙市", "unavailable", "open-meteo").encode(), now))
+        assertEquals(valid.forecast, session.state.value.weather?.forecast)
+        assertEquals(valid.utcOffsetSeconds, session.state.value.weather?.utcOffsetSeconds)
+        assertEquals(now, session.state.value.weather?.fetchedAt)
+    }
 }

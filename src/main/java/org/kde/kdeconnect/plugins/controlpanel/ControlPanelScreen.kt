@@ -267,7 +267,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean) {
             }
         }
         Text(if (state.sink == null) "--" else "${state.volume * 100 / state.maximum}%", fontSize = 11.sp, color = Color(0xFF69778B), modifier = Modifier.testTag("panel-volume-value"))
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Slider(
                 value = dragged ?: state.volume.toFloat().coerceIn(0f, state.maximum.toFloat()),
                 onValueChange = { dragged = drag.change(state.sink?.name, it.roundToInt(), state.maximum, interactive)?.toFloat() },

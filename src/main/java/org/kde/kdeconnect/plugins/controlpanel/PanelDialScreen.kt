@@ -8,7 +8,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +20,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.os.ConfigurationCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +52,9 @@ data class PanelClockAngles(val hour: Float, val minute: Float, val second: Floa
 }
 
 @Composable
+internal fun panelDisplayLocale(): Locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT
+
+@Composable
 fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () -> Unit, weather: PanelWeatherSnapshot? = null) {
     var now by remember { mutableStateOf(Calendar.getInstance()) }
     LaunchedEffect(Unit) {
@@ -59,7 +63,7 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
             delay(1000 - now.timeInMillis % 1000)
         }
     }
-    val locale = Locale.getDefault()
+    val locale = panelDisplayLocale()
     val time = SimpleDateFormat("HH:mm", locale).format(now.time)
     val date = SimpleDateFormat("yyyy/MM/dd  EEEE", locale).format(now.time)
     val light = options.dialId == "info"
@@ -77,7 +81,6 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
             .safeDrawingPadding().padding(24.dp),
     ) {
         val timeSize = minOf(maxWidth.value * 0.23f, maxHeight.value * 0.56f).sp
-        val infoWidth = maxWidth / 3
         val carTimeSize = minOf(maxWidth.value * 0.12f, maxHeight.value * 0.3f).sp
         val inner = Modifier.fillMaxSize().padding(bottom = 25.dp)
         when (options.dialId) {
@@ -94,17 +97,7 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
                     DialMessage(options.message, ink)
                 }
             }
-            "info" -> Column(inner, verticalArrangement = Arrangement.SpaceEvenly) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(time, color = ink, fontSize = timeSize, fontWeight = FontWeight.Light)
-                    Column(Modifier.widthIn(max = infoWidth), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(date, color = ink, fontSize = 20.sp)
-                        Text(cityLabel, color = ink, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        PanelWeatherReadout(snapshot, now.timeInMillis / 1000, ink, 28.sp)
-                    }
-                }
-                Box(Modifier.fillMaxWidth().background(Color(0xFFDDE2D7), RoundedCornerShape(4.dp)).padding(16.dp)) { DialMessage(options.message, ink) }
-            }
+            "info" -> PanelInformationDial(options, now, snapshot, inner)
             "car" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 PanelCarArt(Modifier.weight(1.2f).fillMaxHeight())
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -133,6 +126,25 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
 @Composable
 private fun PanelWeatherReadout(snapshot: PanelWeatherSnapshot?, now: Long, ink: Color, temperatureSize: TextUnit) {
     val fresh = snapshot?.fresh(now) == true && snapshot.status !in setOf("disabled", "no_city")
+    val status = panelWeatherStatus(snapshot, now)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(if (fresh) "${checkNotNull(snapshot.temperature).roundToInt()}°C" else "--°C", color = ink, fontSize = temperatureSize, fontWeight = FontWeight.Light, modifier = Modifier.testTag("panel-weather-temperature"))
+        Text(status, color = ink, fontSize = 13.sp, modifier = Modifier.testTag("panel-weather-status"))
+        val today = snapshot?.forecastDays(now)?.firstOrNull()?.takeIf { it.date == PanelWeatherSnapshot.dateAtOffset(now, snapshot.utcOffsetSeconds ?: 0) }
+        if (today != null) Text(stringResource(R.string.control_panel_forecast_range, today.minimum.roundToInt(), today.maximum.roundToInt()), color = ink, fontSize = 13.sp)
+        Text(stringResource(R.string.control_panel_weather_source), color = ink.copy(alpha = 0.65f), fontSize = 10.sp)
+        if (snapshot?.hasObservation == true) {
+            val formatter = SimpleDateFormat("MM-dd HH:mm", panelDisplayLocale())
+            Text(stringResource(R.string.control_panel_weather_updated,
+                formatter.format(Date(checkNotNull(snapshot.observedAt) * 1000)),
+                formatter.format(Date(checkNotNull(snapshot.fetchedAt) * 1000))), color = ink.copy(alpha = 0.65f), fontSize = 10.sp, maxLines = 2)
+        }
+    }
+}
+
+@Composable
+internal fun panelWeatherStatus(snapshot: PanelWeatherSnapshot?, now: Long): String {
+    val fresh = snapshot?.fresh(now) == true && snapshot.status !in setOf("disabled", "no_city")
     val status = when {
         snapshot?.status == "no_city" -> stringResource(R.string.control_panel_dial_no_city)
         snapshot?.status == "disabled" -> stringResource(R.string.control_panel_weather_disabled)
@@ -141,20 +153,10 @@ private fun PanelWeatherReadout(snapshot: PanelWeatherSnapshot?, now: Long, ink:
         snapshot?.status == "ready" && fresh -> stringResource(weatherDescription(snapshot.weatherCode))
         else -> stringResource(R.string.control_panel_dial_weather_unavailable)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(if (fresh) "${checkNotNull(snapshot.temperature).roundToInt()}°C" else "--°C", color = ink, fontSize = temperatureSize, fontWeight = FontWeight.Light, modifier = Modifier.testTag("panel-weather-temperature"))
-        Text(if (fresh && snapshot.status != "ready") stringResource(R.string.control_panel_weather_cached, status) else status, color = ink, fontSize = 13.sp, modifier = Modifier.testTag("panel-weather-status"))
-        Text(stringResource(R.string.control_panel_weather_source), color = ink.copy(alpha = 0.65f), fontSize = 10.sp)
-        if (snapshot?.hasObservation == true) {
-            val formatter = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-            Text(stringResource(R.string.control_panel_weather_updated,
-                formatter.format(Date(checkNotNull(snapshot.observedAt) * 1000)),
-                formatter.format(Date(checkNotNull(snapshot.fetchedAt) * 1000))), color = ink.copy(alpha = 0.65f), fontSize = 10.sp, maxLines = 2)
-        }
-    }
+    return if (fresh && snapshot?.status != "ready") stringResource(R.string.control_panel_weather_cached, status) else status
 }
 
-private fun weatherDescription(code: Int?) = when (code) {
+internal fun weatherDescription(code: Int?) = when (code) {
     0 -> R.string.control_panel_weather_clear
     1, 2 -> R.string.control_panel_weather_partly_cloudy
     3 -> R.string.control_panel_weather_overcast
@@ -176,7 +178,8 @@ private fun DialMessage(message: String, color: Color) {
 @Composable
 private fun PanelAnalogClock(now: Calendar, modifier: Modifier, circular: Boolean = false) {
     val angles = PanelClockAngles.at(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), now.get(Calendar.SECOND))
-    Canvas(modifier.semantics { contentDescription = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(now.time) }) {
+    val locale = panelDisplayLocale()
+    Canvas(modifier.semantics { contentDescription = SimpleDateFormat("HH:mm:ss", locale).format(now.time) }) {
         val center = Offset(size.width / 2, size.height / 2)
         val ry = size.height * 0.43f
         val rx = if (circular) minOf(ry, size.width * 0.45f) else size.width * 0.46f

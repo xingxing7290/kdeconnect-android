@@ -46,6 +46,16 @@ class PanelWeatherSnapshotTest {
         assertFalse(session.receiveWeather(7, raw(snapshot(fetched = now + 601)), now))
         assertEquals(PanelConnection.READY, session.state.value.connection)
     }
+    @Test fun futureRevisionWeatherRequiresConfigurationThenAnExplicitResend() {
+        val session = ready()
+        assertFalse(session.receiveWeather(8, raw(), now))
+        assertNull(session.state.value.weather)
+        assertTrue(session.receiveConfig(config().copy(revision = 8).encode()))
+        assertNull(session.state.value.weather)
+        assertTrue(session.receiveWeather(8, raw(), now))
+        assertEquals(snapshot(), session.state.value.weather)
+        assertEquals(PanelConnection.READY, session.state.value.connection)
+    }
     @Test fun failuresKeepCachedObservationButNeverInventFetchTime() {
         val session = ready()
         assertTrue(session.receiveWeather(7, raw(), now))

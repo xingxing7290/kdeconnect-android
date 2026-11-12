@@ -257,6 +257,11 @@ class NetworkPacket private constructor(
             inputStream?.closeSafe()
             inputSocket?.closeSafe()
         }
+        /** Opt-in for this payload only; other payloads keep their existing socket policy. */
+        fun setReadTimeout(milliseconds: Int) {
+            require(milliseconds in 1..60_000)
+            inputSocket?.soTimeout = milliseconds
+        }
     }
 
     /** The on-the-wire representation of a packet */

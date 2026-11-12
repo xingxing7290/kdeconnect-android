@@ -39,7 +39,7 @@ class ControlPanelActivity : AppCompatActivity() {
         bindPlugins()
         setContent {
             KdeTheme(this) {
-                ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume, onBack = { finish() })
+                ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume, onBack = { finish() }, assetCache = PanelAssetCache.get(this))
             }
         }
     }

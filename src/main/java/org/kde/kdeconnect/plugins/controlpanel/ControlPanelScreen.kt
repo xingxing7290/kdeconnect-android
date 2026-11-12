@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -50,11 +51,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
@@ -69,6 +73,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.kde.kdeconnect.plugins.systemvolume.Sink
 import org.kde.kdeconnect.plugins.systemvolume.SystemVolumePlugin
 import org.kde.kdeconnect.plugins.systemvolume.getDefaultSink
@@ -83,9 +89,12 @@ fun ControlPanelScreen(
     plugin: ControlPanelPlugin?,
     volume: SystemVolumePlugin?,
     onBack: () -> Unit,
+    assetCache: PanelAssetCache? = null,
 ) {
     val empty = remember { MutableStateFlow(PanelSessionState()) }
     val state by (session?.state ?: empty).collectAsState()
+    val noProblem = remember { MutableStateFlow(false) }
+    val iconProblem by (plugin?.iconProblem ?: noProblem).collectAsState()
     val config = state.config
     val ready = plugin != null && state.connection == PanelConnection.READY
     val background = config?.appearance?.background?.let { Color(android.graphics.Color.parseColor(it)) } ?: Color(0xFFF4F6FA)
@@ -133,6 +142,7 @@ fun ControlPanelScreen(
                 fontSize = 11.sp, color = Color(0xFF69778B), maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
+        if (iconProblem) Text(stringResource(R.string.control_panel_icon_problem), fontSize = 11.sp, color = Color(0xFFB3261E))
         Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight().then(swipe), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 repeat(3) { row ->
@@ -156,7 +166,7 @@ fun ControlPanelScreen(
                                     if (button == null) Text("+", color = Color(0xFF9BA5B4), fontSize = 28.sp)
                                     else {
                                         if (button.id in state.pendingButtons) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
-                                        else Icon(painterResource(buttonIcon(button.kind)), null, Modifier.size(30.dp), tint = Color(0xFF4177C3))
+                                        else PanelButtonIcon(button, assetCache)
                                         if (config?.appearance?.showLabels == true) Text(button.name, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = Color(0xFF25334A))
                                     }
                                 }
@@ -179,6 +189,17 @@ fun ControlPanelScreen(
             if (!result.success) Text(stringResource(R.string.control_panel_failed, result.error), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         }
     }
+}
+
+@Composable
+private fun PanelButtonIcon(button: PanelButton, cache: PanelAssetCache?) {
+    val noChanges = remember { MutableStateFlow(0L) }
+    val version by (cache?.changes ?: noChanges).collectAsState()
+    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, button.icon, version) {
+        value = withContext(Dispatchers.IO) { cache?.bitmap(button.icon)?.asImageBitmap() }
+    }
+    if (image != null) Image(checkNotNull(image), null, Modifier.size(48.dp), contentScale = ContentScale.Fit)
+    else Icon(painterResource(buttonIcon(button.kind)), null, Modifier.size(30.dp), tint = Color(0xFF4177C3))
 }
 
 private fun buttonIcon(kind: String) = when (kind) {

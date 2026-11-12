@@ -19,9 +19,59 @@ import org.junit.runner.RunWith
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.JsonHelper
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [28])
 class ControlPanelPluginTest {
+    private fun withIcon(id: String): NetworkPacket {
+        val base = config()
+        val page = base.pages.first()
+        val slots = page.slots.toMutableList().apply { this[0] = checkNotNull(this[0]).copy(icon = id) }
+        val updated = base.copy(pages = listOf(page.copy(slots = slots)) + base.pages.drop(1))
+        return NetworkPacket(ControlPanelPlugin.CONFIG).apply {
+            this["protocolVersion"] = 1
+            this["config"] = JsonHelper.json.parseToJsonElement(updated.encode()) as JsonObject
+        }
+    }
+    private fun asset(id: String, bytes: ByteArray) = NetworkPacket(ControlPanelPlugin.ASSET).apply {
+        this["protocolVersion"] = 1; this["sessionId"] = plugin.session.sessionId; this["revision"] = 7L
+        this["assetId"] = id; this["mime"] = "image/png"; this["size"] = bytes.size.toLong()
+        payload = NetworkPacket.Payload(bytes)
+    }
+    @Test fun referencedAssetIsRequestedVerifiedAndCached() {
+        val bitmap = android.graphics.Bitmap.createBitmap(256, 256, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.MAGENTA) }
+        val bytes = java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        val id = PanelAssetCache.hash(bytes)
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        java.io.File(context.filesDir, "control-panel-assets/$id.png").delete()
+        plugin.onCreate()
+        assertTrue(plugin.onPacketReceived(withIcon(id)))
+        assertEquals("asset", sent.last().getString("operation"))
+        assertTrue(plugin.onPacketReceived(asset(id, bytes)))
+        val cache = PanelAssetCache.get(context)
+        val deadline = System.currentTimeMillis() + 3000
+        while (!cache.contains(id) && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertTrue(cache.contains(id))
+        assertNotNull(cache.bitmap(id))
+        assertEquals(PanelConnection.READY, plugin.session.state.value.connection)
+    }
+    @Test fun assetFailuresNeverDisableConfiguredActions() {
+        val id = "a".repeat(64)
+        plugin.onCreate()
+        assertTrue(plugin.onPacketReceived(withIcon(id)))
+        val stale = asset(id, byteArrayOf(1)).apply { this["sessionId"] = UUID.randomUUID().toString() }
+        assertFalse(plugin.onPacketReceived(stale))
+        val missing = NetworkPacket(ControlPanelPlugin.ASSET).apply {
+            this["protocolVersion"] = 1; this["sessionId"] = plugin.session.sessionId; this["revision"] = 7L
+            this["assetId"] = id; this["size"] = 0; this["error"] = "asset_missing"
+        }
+        assertTrue(plugin.onPacketReceived(missing))
+        assertEquals(PanelConnection.READY, plugin.session.state.value.connection)
+        assertTrue(plugin.activate("docs"))
+    }
     private lateinit var plugin: ControlPanelPlugin
     private val sent = mutableListOf<NetworkPacket>()
 

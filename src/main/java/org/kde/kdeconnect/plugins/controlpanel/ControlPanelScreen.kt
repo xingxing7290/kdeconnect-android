@@ -210,6 +210,7 @@ private fun panelErrorMessage(error: String): String = when (error) {
     "unsupported_version" -> stringResource(R.string.control_panel_error_version)
     "invalid_config", "config_unavailable" -> stringResource(R.string.control_panel_error_config)
     "stale_revision", "unknown_button", "unknown_page", "invalid_session" -> stringResource(R.string.control_panel_error_changed)
+    "request_expired" -> stringResource(R.string.control_panel_error_expired)
     "target_missing", "launch_failed", "invalid_target" -> stringResource(R.string.control_panel_error_target)
     "association_unavailable" -> stringResource(R.string.control_panel_error_association)
     "dependency_unavailable" -> stringResource(R.string.control_panel_error_dependency)

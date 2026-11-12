@@ -43,7 +43,7 @@ class PanelSession(
     private val pending = LinkedHashMap<String, Pending>()
     private var hasSessionConfig = false
     private var nextSequence = 1L
-    var sessionId: String = ""
+    @Volatile var sessionId: String = ""
         private set
     private val mutableState = MutableStateFlow(PanelSessionState())
     val state = mutableState.asStateFlow()
@@ -116,7 +116,7 @@ class PanelSession(
     fun retrySynchronization() {
         if (mutableState.value.connection != PanelConnection.DISCONNECTED) {
             pending.clear()
-            mutableState.value = mutableState.value.copy(connection = PanelConnection.SYNCING, pendingButtons = emptySet(), error = "")
+            mutableState.value = mutableState.value.copy(connection = PanelConnection.SYNCING, pendingButtons = emptySet(), lastResult = null, error = "")
         }
     }
 
@@ -139,7 +139,8 @@ class PanelSession(
         val keepCurrentPage = hasSessionConfig && current.config?.let { previous ->
             previous.mode == config.mode && previous.activePageId == config.activePageId && config.page(current.activePageId) != null
         } == true
-        if (config != current.config || current.connection != PanelConnection.READY) pending.clear()
+        val changed = config != current.config || current.connection != PanelConnection.READY
+        if (changed) pending.clear()
         hasSessionConfig = true
         mutableState.value = current.copy(
             connection = PanelConnection.READY,
@@ -152,6 +153,7 @@ class PanelSession(
                 else -> config.activePageId
             },
             pendingButtons = pending.values.map { it.request.buttonId }.toSet(),
+            lastResult = if (changed) null else current.lastResult,
             error = "",
         )
         return true
@@ -190,13 +192,13 @@ class PanelSession(
     @Synchronized
     fun receiveResult(result: PanelResult): Boolean {
         if (pending.remove(result.requestId) == null) return false
-        val stale = !result.success && result.error == "stale_revision"
-        if (stale) pending.clear()
+        val needsSynchronization = !result.success && result.error in setOf("stale_revision", "invalid_session")
+        if (needsSynchronization) pending.clear()
         mutableState.value = mutableState.value.copy(
-            connection = if (stale) PanelConnection.SYNCING else mutableState.value.connection,
+            connection = if (needsSynchronization) PanelConnection.SYNCING else mutableState.value.connection,
             pendingButtons = pending.values.map { it.request.buttonId }.toSet(),
             lastResult = result,
-            error = if (stale) "stale_revision" else "",
+            error = if (needsSynchronization) result.error else "",
         )
         return true
     }

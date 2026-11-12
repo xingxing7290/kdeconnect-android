@@ -145,4 +145,32 @@ class PanelSessionTest {
         assertEquals(fixture(), session.state.value.config)
         assertThrows(IllegalStateException::class.java) { session.action("docs") }
     }
+
+    @Test fun feedbackDoesNotSurviveAnExplicitSynchronizationOrNewConfiguration() {
+        val session = readySession()
+        var request = session.action("docs")
+        assertTrue(session.receiveResult(PanelResult(request.requestId, true)))
+        assertNotNull(session.state.value.lastResult)
+        assertTrue(session.receiveConfig(fixture().encode()))
+        assertNotNull(session.state.value.lastResult)
+        session.retrySynchronization()
+        assertNull(session.state.value.lastResult)
+        assertTrue(session.receiveConfig(fixture().encode()))
+        request = session.action("docs")
+        assertTrue(session.receiveResult(PanelResult(request.requestId, false, "launch_failed")))
+        assertTrue(session.receiveConfig(fixture().copy(revision = 8).encode()))
+        assertNull(session.state.value.lastResult)
+    }
+
+    @Test fun invalidSessionResultRequiresFreshConfigurationWithoutResettingSequence() {
+        val session = readySession()
+        val request = session.action("docs")
+        assertTrue(session.receiveResult(PanelResult(request.requestId, false, "invalid_session")))
+        assertEquals(PanelConnection.SYNCING, session.state.value.connection)
+        assertTrue(session.state.value.pendingButtons.isEmpty())
+        assertThrows(IllegalStateException::class.java) { session.action("docs") }
+        assertTrue(session.receiveConfig(fixture().encode()))
+        assertEquals(request.sequence + 1, session.action("docs").sequence)
+        assertFalse(session.receiveResult(PanelResult(request.requestId, true)))
+    }
 }

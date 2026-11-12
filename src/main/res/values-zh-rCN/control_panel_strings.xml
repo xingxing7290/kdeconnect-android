@@ -56,4 +56,5 @@
     <string name="control_panel_error_dependency">目标程序缺少运行组件，请在电脑上安装或修复相应依赖。</string>
     <string name="control_panel_error_cancelled">此操作已在电脑端取消。</string>
     <string name="control_panel_error_launch_environment">电脑暂时无法准备启动环境，请重启其 KDE Connect 会话后再试。</string>
+    <string name="control_panel_error_expired">此请求已过期，未重新执行。请先确认电脑状态，再决定是否重新操作。</string>
 </resources>

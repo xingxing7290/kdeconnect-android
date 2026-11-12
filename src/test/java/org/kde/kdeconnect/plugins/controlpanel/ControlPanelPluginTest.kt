@@ -103,11 +103,12 @@ class ControlPanelPluginTest {
         assertTrue(plugin.activate("docs"))
     }
     private lateinit var plugin: ControlPanelPlugin
+    private lateinit var device: Device
     private val sent = mutableListOf<NetworkPacket>()
 
     @Before
     fun setup() {
-        val device = mockk<Device> {
+        device = mockk<Device> {
             every { deviceId } returns "panel-test-device"
             every { isPaired } returns true
             every { isReachable } returns true
@@ -232,5 +233,137 @@ class ControlPanelPluginTest {
         assertFalse(plugin.activate("docs"))
         plugin.synchronize()
         assertEquals(PanelConnection.SYNCING, plugin.session.state.value.connection)
+    }
+
+    @Test fun boundResponsesRejectOldSessionsAndCannotDowngradeToUnboundPackets() {
+        plugin.onCreate()
+        val current = plugin.session.sessionId
+        val old = UUID.randomUUID().toString()
+        assertFalse(plugin.onPacketReceived(configurationPacket().apply { this["sessionId"] = old; this["protocolVersion"] = 2 }))
+        assertEquals(PanelConnection.SYNCING, plugin.session.state.value.connection)
+        assertTrue(plugin.onPacketReceived(configurationPacket().apply { this["sessionId"] = current }))
+        val accepted = plugin.session.state.value
+        assertFalse(plugin.onPacketReceived(configurationPacket()))
+        assertFalse(plugin.onPacketReceived(configurationPacket().apply { this["sessionId"] = 1 }))
+        assertFalse(plugin.onPacketReceived(result("", "config_unavailable").apply { this["sessionId"] = old }))
+        assertFalse(plugin.onPacketReceived(weatherPacket().apply { this["sessionId"] = old }))
+        assertEquals(accepted, plugin.session.state.value)
+        assertTrue(plugin.activate("docs"))
+        val request = sent.last()
+        assertFalse(plugin.onPacketReceived(result(request.getString("requestId"))))
+        assertTrue(plugin.session.state.value.pendingButtons.contains("docs"))
+        assertTrue(plugin.onPacketReceived(result(request.getString("requestId")).apply { this["sessionId"] = current }))
+        val page = NetworkPacket(ControlPanelPlugin.STATE).apply {
+            this["protocolVersion"] = 1; this["revision"] = 7L; this["activePageId"] = "editor"; this["foregroundApplication"] = "notepad.exe"
+        }
+        assertFalse(plugin.onPacketReceived(page))
+        page["sessionId"] = old
+        assertFalse(plugin.onPacketReceived(page))
+        page["sessionId"] = current
+        assertTrue(plugin.onPacketReceived(page))
+        assertEquals("editor", plugin.session.state.value.activePageId)
+    }
+
+    @Test fun callbacksAndTimersFromDestroyedSessionCannotMutateReconnectedSession() {
+        val callbacks = mutableListOf<Device.SendPacketStatusCallback>()
+        every { device.sendPacket(any(), any()) } answers { sent.add(arg(0)); callbacks.add(arg(1)); Unit }
+        plugin.onCreate()
+        val oldCallback = callbacks.single()
+        val ticker = ControlPanelPlugin::class.java.getDeclaredField("tick").apply { isAccessible = true }
+        val oldTick = ticker.get(plugin) as Runnable
+        plugin.onDestroy()
+        plugin.onCreate()
+        assertTrue(plugin.onPacketReceived(configurationPacket().apply { this["sessionId"] = plugin.session.sessionId }))
+        val state = plugin.session.state.value
+        val sentCount = sent.size
+        every { device.isReachable } returns false
+        oldCallback.onFailure(java.io.IOException("old transport"))
+        oldTick.run()
+        assertEquals(state, plugin.session.state.value)
+        assertEquals(sentCount, sent.size)
+        callbacks.last().onFailure(java.io.IOException("current transport"))
+        assertEquals(PanelConnection.DISCONNECTED, plugin.session.state.value.connection)
+    }
+
+    @Test fun unpairAndUnreachableChecksPreventAllNewRequests() {
+        ready()
+        val count = sent.size
+        every { device.isPaired } returns false
+        assertFalse(plugin.activate("docs"))
+        assertFalse(plugin.selectPage("editor"))
+        plugin.synchronize()
+        assertFalse(plugin.onPacketReceived(configurationPacket()))
+        assertEquals(PanelConnection.DISCONNECTED, plugin.session.state.value.connection)
+        assertEquals(count, sent.size)
+        every { device.isPaired } returns true
+        every { device.isReachable } returns false
+        assertFalse(plugin.activate("docs"))
+        plugin.synchronize()
+        assertEquals(count, sent.size)
+    }
+
+    @Test fun invalidSessionResultRehandshakesWithoutReplayingAction() {
+        ready()
+        assertTrue(plugin.activate("docs"))
+        val action = sent.last()
+        assertTrue(plugin.onPacketReceived(result(action.getString("requestId"), "invalid_session")))
+        assertEquals(PanelConnection.SYNCING, plugin.session.state.value.connection)
+        assertEquals("config", sent.last().getString("operation"))
+        assertEquals(action.getString("sessionId"), sent.last().getString("sessionId"))
+        assertEquals(1, sent.count { it.getString("operation") == "action" })
+        assertTrue(plugin.onPacketReceived(configurationPacket()))
+        assertNull(plugin.session.state.value.lastResult)
+        assertTrue(plugin.activate("docs"))
+        assertEquals(2L, sent.last().getLong("sequence"))
+    }
+
+    @Test fun inconsistentSuccessAndErrorCannotAcknowledgePendingAction() {
+        ready()
+        assertTrue(plugin.activate("docs"))
+        val id = sent.last().getString("requestId")
+        assertFalse(plugin.onPacketReceived(result(id).apply { this["error"] = "stale_revision" }))
+        assertFalse(plugin.onPacketReceived(result(id).apply { this["success"] = false }))
+        assertEquals(PanelConnection.READY, plugin.session.state.value.connection)
+        assertTrue(plugin.session.state.value.pendingButtons.contains("docs"))
+        assertTrue(plugin.onPacketReceived(result(id)))
+    }
+
+    @Test fun twoDevicePluginsDoNotAcceptEachOthersAcknowledgements() {
+        plugin.onCreate()
+        val otherSent = mutableListOf<NetworkPacket>()
+        val otherDevice = mockk<Device> {
+            every { deviceId } returns "panel-test-other-device"
+            every { isPaired } returns true
+            every { isReachable } returns true
+            every { sendPacket(any(), any()) } answers { otherSent.add(arg(0)); arg<Device.SendPacketStatusCallback>(1).onSuccess() }
+        }
+        val other = ControlPanelPlugin().apply {
+            setContext(ApplicationProvider.getApplicationContext<Application>(), otherDevice)
+            preferences.edit().clear().commit()
+            onCreate()
+        }
+        try {
+            assertTrue(plugin.onPacketReceived(configurationPacket().apply { this["sessionId"] = plugin.session.sessionId }))
+            assertTrue(other.onPacketReceived(configurationPacket().apply {
+                this["sessionId"] = other.session.sessionId
+                this["config"] = JsonHelper.json.parseToJsonElement(config().copy(revision = 8).encode()) as JsonObject
+            }))
+            assertEquals(7L, checkNotNull(plugin.session.state.value.config).revision)
+            assertEquals(8L, checkNotNull(other.session.state.value.config).revision)
+            assertEquals(7L, PanelConfig.parse(checkNotNull(plugin.preferences.getString("panel_config", null))).revision)
+            assertEquals(8L, PanelConfig.parse(checkNotNull(other.preferences.getString("panel_config", null))).revision)
+            assertTrue(plugin.activate("docs"))
+            assertTrue(other.activate("docs"))
+            val firstRequest = sent.last()
+            val secondRequest = otherSent.last()
+            val secondResult = result(secondRequest.getString("requestId")).apply { this["sessionId"] = other.session.sessionId }
+            assertFalse(plugin.onPacketReceived(secondResult))
+            assertTrue(plugin.session.state.value.pendingButtons.contains("docs"))
+            assertTrue(other.session.state.value.pendingButtons.contains("docs"))
+            assertTrue(other.onPacketReceived(secondResult))
+            assertTrue(plugin.onPacketReceived(result(firstRequest.getString("requestId")).apply { this["sessionId"] = plugin.session.sessionId }))
+            assertTrue(other.session.state.value.pendingButtons.isEmpty())
+            assertTrue(plugin.session.state.value.pendingButtons.isEmpty())
+        } finally { other.onDestroy(); other.preferences.edit().clear().commit() }
     }
 }

@@ -73,7 +73,7 @@ internal object PanelConfigJson {
     }
 
     // Count containers even in unknown fields; quoted brackets do not contribute.
-    private fun requireSafeDepth(raw: String) {
+    fun requireSafeDepth(raw: String) {
         var depth = 0
         var inString = false
         var escaped = false

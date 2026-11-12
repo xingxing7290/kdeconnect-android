@@ -41,7 +41,7 @@ class ControlPanelPlugin : Plugin() {
     override val displayName: String get() = context.getString(R.string.control_panel_title)
     override val description: String get() = context.getString(R.string.control_panel_description)
     override val settingsScope = SettingsScope.PER_DEVICE
-    override val supportedPacketTypes = arrayOf(CONFIG, STATE, RESULT, ASSET)
+    override val supportedPacketTypes = arrayOf(CONFIG, STATE, RESULT, ASSET, DIAL)
     override val outgoingPacketTypes = arrayOf(REQUEST)
 
     override fun getUiButtons() = listOf(
@@ -56,6 +56,7 @@ class ControlPanelPlugin : Plugin() {
             send(request("asset").apply { this["assetId"] = id; this["revision"] = revision })
         }, ::synchronize)
         preferences.getString("panel_config", null)?.let(session::restoreDisplay)
+        preferences.getString("panel_weather", null)?.let { session.restoreWeather(it) }
         session.connected()
         syncAttempts = 0
         sendConfigRequest()
@@ -126,16 +127,24 @@ class ControlPanelPlugin : Plugin() {
             np.payload?.close(); return false
         }
         if (np.type == ASSET && np.serialize().length > 4096) { np.payload?.close(); return false }
+        if (np.type == DIAL && np.serialize().length > 16_384) return false
         // Access the wire body to reject type coercion in the generic NetworkPacket getters.
         val body = try {
             JsonHelper.json.parseToJsonElement(np.serialize()).let { (it as JsonObject)["body"] as JsonObject }
         } catch (_: IllegalArgumentException) { np.payload?.close(); return false }
         if (number(body, "protocolVersion") != 1L) {
+            if (np.type == DIAL) return false
             if (np.type == ASSET) { np.payload?.close(); iconProblem.value = true; return false }
             session.failed("unsupported_version")
             return false
         }
         return when (np.type) {
+            DIAL -> {
+                val revision = number(body, "revision") ?: return false
+                val accepted = session.receiveWeather(revision, body.toString())
+                if (accepted) preferences.edit().putString("panel_weather", session.state.value.weather?.encode()).apply()
+                accepted
+            }
             ASSET -> assets?.receive(body, np.payload) ?: false.also { np.payload?.close() }
             CONFIG -> {
                 val config = body["config"] as? JsonObject ?: return false
@@ -183,5 +192,6 @@ class ControlPanelPlugin : Plugin() {
         const val STATE = "kdeconnect.controlpanel.state"
         const val RESULT = "kdeconnect.controlpanel.result"
         const val ASSET = "kdeconnect.controlpanel.asset"
+        const val DIAL = "kdeconnect.controlpanel.dial"
     }
 }

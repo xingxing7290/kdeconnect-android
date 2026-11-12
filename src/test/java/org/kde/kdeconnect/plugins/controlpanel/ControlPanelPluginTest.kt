@@ -26,6 +26,36 @@ import org.robolectric.annotation.Config
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [28])
 class ControlPanelPluginTest {
+    private fun weatherPacket() = NetworkPacket(ControlPanelPlugin.DIAL).apply {
+        this["protocolVersion"] = 1; this["revision"] = 7L
+        this["city"] = "长沙市"; this["resolvedCity"] = "长沙 / 中国"
+        this["status"] = "ready"; this["source"] = "open-meteo"
+        this["observedAt"] = System.currentTimeMillis() / 1000 - 300
+        this["fetchedAt"] = System.currentTimeMillis() / 1000
+        this["temperature"] = 18.5; this["weatherCode"] = 3
+    }
+    @Test fun weatherIsPersistedAndRestoredWithoutBreakingControlSession() {
+        ready()
+        assertTrue(plugin.onPacketReceived(weatherPacket()))
+        val snapshot = checkNotNull(plugin.session.state.value.weather)
+        assertEquals(18.5, checkNotNull(snapshot.temperature), 0.001)
+        assertNotNull(plugin.preferences.getString("panel_weather", null))
+        plugin.onDestroy()
+        plugin.onCreate()
+        assertEquals(snapshot, plugin.session.state.value.weather)
+        assertEquals(PanelConnection.SYNCING, plugin.session.state.value.connection)
+    }
+    @Test fun malformedAndStaleWeatherNeverDisableActions() {
+        ready()
+        assertTrue(plugin.onPacketReceived(weatherPacket()))
+        val valid = plugin.session.state.value.weather
+        assertFalse(plugin.onPacketReceived(weatherPacket().apply { this["revision"] = 6L }))
+        assertFalse(plugin.onPacketReceived(weatherPacket().apply { this["temperature"] = "18.5" }))
+        assertFalse(plugin.onPacketReceived(weatherPacket().apply { this["protocolVersion"] = 2 }))
+        assertEquals(valid, plugin.session.state.value.weather)
+        assertEquals(PanelConnection.READY, plugin.session.state.value.connection)
+        assertTrue(plugin.activate("docs"))
+    }
     private fun withIcon(id: String): NetworkPacket {
         val base = config()
         val page = base.pages.first()

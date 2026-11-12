@@ -20,6 +20,7 @@ data class PanelSessionState(
     val pendingButtons: Set<String> = emptySet(),
     val lastResult: PanelResult? = null,
     val error: String = "",
+    val weather: PanelWeatherSnapshot? = null,
 )
 
 @Serializable
@@ -51,7 +52,38 @@ class PanelSession(
     fun restoreDisplay(raw: String) {
         if (mutableState.value.connection != PanelConnection.DISCONNECTED) return
         val config = try { PanelConfig.parse(raw) } catch (_: IllegalArgumentException) { return }
-        mutableState.value = mutableState.value.copy(config = config, activePageId = config.activePageId)
+        mutableState.value = mutableState.value.copy(config = config, activePageId = config.activePageId,
+            weather = mutableState.value.weather?.takeIf { it.city == config.idle.city.trim() })
+    }
+
+    @Synchronized
+    fun restoreWeather(raw: String, now: Long = System.currentTimeMillis() / 1000) {
+        val current = mutableState.value
+        if (current.connection != PanelConnection.DISCONNECTED) return
+        val snapshot = PanelWeatherSnapshot.parse(raw) ?: return
+        if (snapshot.city != current.config?.idle?.city?.trim()) return
+        if (snapshot.hasObservation && (now - checkNotNull(snapshot.fetchedAt) !in -600..86_400 || now - checkNotNull(snapshot.observedAt) !in -600..86_400)) return
+        mutableState.value = current.copy(weather = snapshot)
+    }
+
+    @Synchronized
+    fun receiveWeather(revision: Long, raw: String, now: Long = System.currentTimeMillis() / 1000): Boolean {
+        val current = mutableState.value
+        val config = current.config ?: return false
+        if (current.connection != PanelConnection.READY || revision != config.revision) return false
+        var snapshot = PanelWeatherSnapshot.parse(raw) ?: return false
+        if (snapshot.city != config.idle.city.trim()) return false
+        if (snapshot.hasObservation && (checkNotNull(snapshot.fetchedAt) > now + 600 || checkNotNull(snapshot.observedAt) > now + 600)) return false
+        val previous = current.weather?.takeIf { it.city == snapshot.city && it.hasObservation }
+        val older = previous != null && snapshot.hasObservation &&
+            checkNotNull(previous.fetchedAt) <= now + 600 && checkNotNull(previous.observedAt) <= now + 600 &&
+            (checkNotNull(snapshot.fetchedAt) < checkNotNull(previous.fetchedAt) || checkNotNull(snapshot.observedAt) < checkNotNull(previous.observedAt))
+        if (previous != null && snapshot.status in setOf("loading", "unavailable") &&
+            (!snapshot.hasObservation || older)) {
+            snapshot = snapshot.withObservation(previous)
+        } else if (older) return false
+        mutableState.value = current.copy(weather = snapshot)
+        return true
     }
 
     @Synchronized
@@ -109,6 +141,7 @@ class PanelSession(
         mutableState.value = current.copy(
             connection = PanelConnection.READY,
             config = config,
+            weather = current.weather?.takeIf { it.city == config.idle.city.trim() },
             activePageId = when {
                 config.mode == "single" -> config.homePageId
                 sameConfig -> current.activePageId

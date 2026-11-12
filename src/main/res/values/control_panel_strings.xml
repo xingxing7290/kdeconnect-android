@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_panel_weather_disabled">Idle weather disabled</string>
+    <string name="control_panel_weather_stale">Weather data expired</string>
+    <string name="control_panel_weather_loading">Updating weather</string>
+    <string name="control_panel_weather_cached">Cached · %1$s</string>
+    <string name="control_panel_weather_source">Open-Meteo model weather</string>
+    <string name="control_panel_weather_updated">Model %1$s · retrieved %2$s</string>
+    <string name="control_panel_weather_clear">Clear</string>
+    <string name="control_panel_weather_partly_cloudy">Partly cloudy</string>
+    <string name="control_panel_weather_overcast">Overcast</string>
+    <string name="control_panel_weather_fog">Fog</string>
+    <string name="control_panel_weather_drizzle">Drizzle</string>
+    <string name="control_panel_weather_freezing_rain">Freezing rain or drizzle</string>
+    <string name="control_panel_weather_rain">Rain</string>
+    <string name="control_panel_weather_snow">Snow</string>
+    <string name="control_panel_weather_showers">Rain showers</string>
+    <string name="control_panel_weather_thunderstorm">Thunderstorm</string>
+    <string name="control_panel_dial_wake">Touch to return to controls</string>
+    <string name="control_panel_dial_no_city">City not set</string>
+    <string name="control_panel_dial_weather_unavailable">Weather unavailable</string>
+    <string name="control_panel_dial_car_art">Original illustration · no vehicle telemetry</string>
     <string name="control_panel_icon_problem">Some icons are unavailable. Tap refresh to retry.</string>
     <string name="control_panel_output">Choose audio output</string>
     <string name="control_panel_foreground">Following: %1$s</string>

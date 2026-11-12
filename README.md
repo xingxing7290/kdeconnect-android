@@ -15,10 +15,14 @@
 - [双端音量使用及验证边界](docs/control-panel/VOLUME.zh-CN.md)
 - [图标导入、同步及离线缓存](docs/control-panel/ASSETS.zh-CN.md)
 - [图标阶段实现与验证](docs/control-panel/MILESTONE-05.zh-CN.md)
+- [空闲表盘与天气说明](docs/control-panel/DIALS.zh-CN.md)
+- [基础表盘与天气阶段记录](docs/control-panel/MILESTONE-06.zh-CN.md)
 - [Windows 智能跟随使用说明](docs/control-panel/FOLLOW.zh-CN.md)
 - [配套桌面端](https://github.com/xingxing7290/kdeconnect-kde)
 
 原 KDE Connect 功能与上游说明保留如下。
+
+本分支完整本地测试需 JDK 21；Robolectric SDK 37 还需 JVM 参数 `--add-opens=java.base/jdk.internal.access=ALL-UNNAMED`。正式资源已纳入单测，不能用缺资源时的旧测试环境代替当前回归。环境与证据见上述表盘说明和阶段六记录；不改变 APK 的 Java 字节码目标或 Android 最低版本。
 
 KDE Connect is a multi-platform app that allows your devices to communicate (eg: your phone and your computer).
 

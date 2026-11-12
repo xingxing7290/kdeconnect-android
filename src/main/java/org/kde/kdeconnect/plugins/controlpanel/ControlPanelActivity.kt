@@ -4,12 +4,20 @@
 package org.kde.kdeconnect.plugins.controlpanel
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
+import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -19,6 +27,11 @@ import org.kde.kdeconnect.plugins.systemvolume.SystemVolumePlugin
 import org.kde.kdeconnect.ui.compose.KdeTheme
 
 class ControlPanelActivity : AppCompatActivity() {
+    private val idle = PanelIdleController(SystemClock::elapsedRealtime)
+    private val idleHandler = Handler(Looper.getMainLooper())
+    private val idleTick = object : Runnable {
+        override fun run() { idle.tick(); idleHandler.postDelayed(this, 200) }
+    }
     private var device: Device? = null
     private var plugin by mutableStateOf<ControlPanelPlugin?>(null)
     private var volume by mutableStateOf<SystemVolumePlugin?>(null)
@@ -37,11 +50,43 @@ class ControlPanelActivity : AppCompatActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         bindPlugins()
+        onBackPressedDispatcher.addCallback(this) { if (!idle.wake()) finish() }
         setContent {
             KdeTheme(this) {
-                ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume, onBack = { finish() }, assetCache = PanelAssetCache.get(this))
+                val state by (displaySession?.state ?: emptySession.state).collectAsState()
+                val showing by idle.showing.collectAsState()
+                LaunchedEffect(state.config?.idle) { idle.configure(state.config?.idle) }
+                if (showing && state.config != null) {
+                    PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() }, weather = state.weather)
+                } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume, onBack = { finish() }, assetCache = PanelAssetCache.get(this))
             }
         }
+    }
+
+    private val emptySession = PanelSession()
+    override fun onResume() {
+        super.onResume()
+        idle.setActive(true)
+        idleHandler.post(idleTick)
+    }
+    override fun onPause() {
+        idleHandler.removeCallbacks(idleTick)
+        idle.setActive(false)
+        super.onPause()
+    }
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val phase = when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> PanelIdleController.Touch.START
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> PanelIdleController.Touch.END
+            else -> PanelIdleController.Touch.CONTINUE
+        }
+        return idle.touch(phase) || super.dispatchTouchEvent(event)
+    }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) {
+            if (idle.key(event.keyCode, event.action == KeyEvent.ACTION_DOWN)) return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun bindPlugins() {

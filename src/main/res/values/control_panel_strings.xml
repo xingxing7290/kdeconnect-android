@@ -57,4 +57,8 @@
     <string name="control_panel_error_cancelled">The action was cancelled on the computer.</string>
     <string name="control_panel_error_launch_environment">The computer could not prepare the launch environment. Restart its KDE Connect session and try again.</string>
     <string name="control_panel_error_expired">This request expired and was not executed again. Check the computer before choosing whether to repeat the action.</string>
+    <string name="control_panel_appearance_switch">Switch light or dark mode</string>
+    <string name="control_panel_appearance_system">Follow system</string>
+    <string name="control_panel_appearance_light">Light mode</string>
+    <string name="control_panel_appearance_dark">Dark mode</string>
 </resources>

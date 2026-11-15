@@ -91,3 +91,12 @@ Windows 实现采用 200 毫秒采样、400 毫秒连续稳定去抖。手机手
 先记录两端当前基线。Android 使用仓库 Gradle Wrapper、SDK 37；设备测试用独立 debug applicationId，已有连接设备可供后续联调。桌面使用官方 Craft 方式获得 Qt/KF/DBus 依赖，再用 CMake/CTest 和 Windows 打包流程。
 
 每条长任务拆分成下载、配置、构建、单测、打包、联调阶段；每阶段输出日志，10 分钟无明确进展时停止并记录。测试失败不得替换成更小范围检查后声称全部通过。
+
+## 手机端明暗模式
+
+- 全局设置（设置 → 选择主题：系统默认 / 浅色 / 深色）写入 `theme_pref`。`ThemeUtil` 继续负责 AppCompat 视图；`KdeTheme` 现在也读取同一偏好，因此 Compose 页面（设备列表、配对、分享、控制面板等）真正跟随该选项，而不是只依赖系统深色标志。
+- 控制面板另提供本机快捷切换：标题栏右侧的图标按钮可在「跟随系统 / 明亮模式 / 黑暗模式」之间选择，写入私有 SharedPreferences `control_panel_appearance` 的 `mode`，下次打开自动恢复。
+- 该选择是纯手机端外观设置，**不写入 `panel.json`、不改变修订号、不触发同步**，桌面端配置不会被覆盖；快捷切换也不改写全局 `theme_pref`。
+- 「跟随系统」为默认，完全保留历史表现：控制面板按桌面 `appearance.background` 绘制纯色背景，文字经 `panelReadableColor` 保证 4.5:1 对比度；只有 `info` 表盘使用浅色底，其余表盘保持黑色 AMOLED 友好底。
+- 明确选择「明亮模式」或「黑暗模式」时覆盖背景，控制面板网格、文字、按钮图标、音量滑块与表盘（指针、刻度、汽车示意图）统一切换配色；Material 3 弹窗等控件通过 `KdeTheme(darkTheme = …)` 同步。
+- 配色令牌集中在 `PanelAppearanceMode.kt`（`PanelPalette` / `PanelDialPalette`），解析、持久化取值与明暗对比度由纯 JVM 测试 `PanelAppearanceTest` 覆盖；真机观感仍需后续构建验证。

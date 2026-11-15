@@ -48,6 +48,7 @@ class ControlPanelActivity : AppCompatActivity() {
     private var plugin by mutableStateOf<ControlPanelPlugin?>(null)
     private var volume by mutableStateOf<SystemVolumePlugin?>(null)
     private var displaySession by mutableStateOf<PanelSession?>(null)
+    private var appearanceMode by mutableStateOf(PanelAppearanceMode.SYSTEM)
     private val changed = Device.PluginsChangedListener { runOnUiThread { bindPlugins() } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,9 +63,10 @@ class ControlPanelActivity : AppCompatActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         bindPlugins()
+        appearanceMode = PanelAppearanceStore.read(this)
         onBackPressedDispatcher.addCallback(this) { if (!idle.wake()) finish() }
         setContent {
-            KdeTheme(this) {
+            KdeTheme(this, darkTheme = appearanceMode.darkOverride) {
                 val state by (displaySession?.state ?: emptySession.state).collectAsState()
                 val showing by idle.showing.collectAsState()
                 val dialOptions = state.config?.idle
@@ -75,13 +77,13 @@ class ControlPanelActivity : AppCompatActivity() {
                 LaunchedEffect(state.config?.idle) { idle.configure(state.config?.idle) }
                 if (showing && state.config != null) {
                     PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() },
-                        weather = state.weather, localWeather = localWeather)
+                        weather = state.weather, localWeather = localWeather, appearanceMode = appearanceMode)
                 } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume,
                     onBack = { finish() }, assetCache = PanelAssetCache.get(this), onSynchronize = {
                         val current = plugin
                         if (current != null && device?.isReachable == true) current.synchronize()
                         else BackgroundService.ForceRefreshConnections(this)
-                    })
+                    }, appearanceMode = appearanceMode, onAppearanceModeChange = ::setAppearanceMode)
             }
         }
     }
@@ -117,6 +119,11 @@ class ControlPanelActivity : AppCompatActivity() {
             if (idle.key(event.keyCode, event.action == KeyEvent.ACTION_DOWN)) return true
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun setAppearanceMode(mode: PanelAppearanceMode) {
+        appearanceMode = mode
+        PanelAppearanceStore.write(this, mode)
     }
 
     private fun bindPlugins() {

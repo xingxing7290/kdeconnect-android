@@ -277,6 +277,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
     companion object {
         const val KEY_BLUETOOTH_ENABLED: String = "bluetooth_enabled"
-        const val KEY_APP_THEME: String = "theme_pref"
+        const val KEY_APP_THEME: String = ThemeUtil.KEY_THEME_PREF
     }
 }

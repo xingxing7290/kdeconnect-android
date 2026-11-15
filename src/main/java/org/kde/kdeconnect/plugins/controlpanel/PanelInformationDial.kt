@@ -25,17 +25,16 @@ import org.kde.kdeconnect_tp.R
 import kotlin.math.roundToInt
 
 @Composable
-internal fun PanelInformationDial(options: PanelIdle, now: Calendar, weather: PanelWeatherSnapshot?, modifier: Modifier) {
+internal fun PanelInformationDial(options: PanelIdle, now: Calendar, weather: PanelWeatherSnapshot?, modifier: Modifier,
+    ink: Color = Color(0xFF202722), quiet: Color = Color(0xFF5F655F)) {
     val battery = rememberPanelBatteryState()
-    val ink = Color(0xFF202722)
-    val quiet = Color(0xFF5F655F)
     val seconds = now.timeInMillis / 1000
     val fresh = weather?.fresh(seconds) == true && weather.status !in setOf("disabled", "no_city")
     val days = weather?.forecastDays(seconds).orEmpty()
     val locale = panelDisplayLocale()
     BoxWithConstraints(modifier.border(3.dp, ink, RoundedCornerShape(14.dp)).padding(10.dp)) {
         if (maxHeight.value / LocalDensity.current.fontScale < 200f) {
-            PanelCompactInformationDial(options, now, weather, battery, ink)
+            PanelCompactInformationDial(options, now, weather, battery, ink, quiet)
             return@BoxWithConstraints
         }
         val unit = minOf(maxWidth.value / 720f, maxHeight.value / 360f).coerceIn(0.45f, 2f)
@@ -119,12 +118,12 @@ internal fun PanelInformationDial(options: PanelIdle, now: Calendar, weather: Pa
 }
 
 @Composable
-private fun PanelCompactInformationDial(options: PanelIdle, now: Calendar, weather: PanelWeatherSnapshot?, battery: PanelBatteryState, ink: Color) {
+private fun PanelCompactInformationDial(options: PanelIdle, now: Calendar, weather: PanelWeatherSnapshot?, battery: PanelBatteryState,
+    ink: Color, quiet: Color = Color(0xFF5F655F)) {
     val locale = panelDisplayLocale()
     val seconds = now.timeInMillis / 1000
     val fresh = weather?.fresh(seconds) == true && weather.status !in setOf("disabled", "no_city")
     val days = weather?.forecastDays(seconds).orEmpty()
-    val quiet = Color(0xFF5F655F)
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PanelDialText(SimpleDateFormat("HH:mm:ss", locale).format(now.time), Modifier.weight(1f), color = ink, fontSize = 28.sp, lineHeight = 32.sp,

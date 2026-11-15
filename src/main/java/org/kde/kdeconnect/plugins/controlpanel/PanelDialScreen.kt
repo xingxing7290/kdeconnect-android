@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -71,6 +72,7 @@ fun PanelDialScreen(
     onWake: () -> Unit,
     weather: PanelWeatherSnapshot? = null,
     localWeather: PanelWeatherSnapshot? = null,
+    appearanceMode: PanelAppearanceMode = PanelAppearanceMode.SYSTEM,
 ) {
     var now by remember { mutableStateOf(Calendar.getInstance()) }
     LaunchedEffect(Unit) {
@@ -82,9 +84,9 @@ fun PanelDialScreen(
     val locale = panelDisplayLocale()
     val time = SimpleDateFormat("HH:mm", locale).format(now.time)
     val date = SimpleDateFormat("yyyy/MM/dd  EEEE", locale).format(now.time)
-    val light = options.dialId == "info"
-    val ink = if (light) Color(0xFF202722) else Color(0xFFF5F7FA)
-    val accent = if (light) ink else Color(0xFF85B4FF)
+    val dial = dialPalette(appearanceMode, options.dialId)
+    val ink = dial.ink
+    val accent = dial.accent
     val wakeDescription = stringResource(R.string.control_panel_dial_wake)
     val nowSeconds = now.timeInMillis / 1000
     val remote = weather?.takeIf { it.city == options.city.trim() }
@@ -99,7 +101,7 @@ fun PanelDialScreen(
     }
     val cityLabel = snapshot?.resolvedCity ?: options.city.ifBlank { stringResource(R.string.control_panel_dial_no_city) }
     BoxWithConstraints(
-        Modifier.fillMaxSize().background(if (light) Color(0xFFECEEE8) else Color.Black)
+        Modifier.fillMaxSize().background(dial.background)
             .clickable(onClickLabel = wakeDescription, onClick = onWake)
             .semantics { contentDescription = wakeDescription }.testTag("panel-dial-${options.dialId}")
             .safeDrawingPadding(),
@@ -116,11 +118,11 @@ fun PanelDialScreen(
                 val inner = Modifier.fillMaxSize()
                 when (options.dialId) {
                     "analog" -> Column(inner, horizontalAlignment = Alignment.CenterHorizontally) {
-                        PanelAnalogClock(now, Modifier.fillMaxWidth().weight(1f))
+                        PanelAnalogClock(now, Modifier.fillMaxWidth().weight(1f), palette = dial)
                         PanelDialText(date, color = ink, fontSize = 13.sp)
                     }
                     "weather" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 24.dp)) {
-                        PanelAnalogClock(now, Modifier.weight(if (compact) 0.75f else 1f).fillMaxHeight(), circular = true)
+                        PanelAnalogClock(now, Modifier.weight(if (compact) 0.75f else 1f).fillMaxHeight(), circular = true, palette = dial)
                         Column(Modifier.weight(if (compact) 1.25f else 1f), verticalArrangement = Arrangement.spacedBy(if (weatherCompact) 4.dp else 12.dp)) {
                             PanelDialText(cityLabel, color = ink, fontSize = if (compact) 18.sp else 24.sp, maxLines = if (weatherCompact) 1 else 2, overflow = TextOverflow.Ellipsis)
                             PanelWeatherReadout(snapshot, now.timeInMillis / 1000, ink, if (compact) 32.sp else if (weatherCompact) 48.sp else 64.sp, weatherCompact)
@@ -128,14 +130,14 @@ fun PanelDialScreen(
                             DialMessage(options.message, ink, weatherCompact)
                         }
                     }
-                    "info" -> PanelInformationDial(options, now, snapshot, inner)
+                    "info" -> PanelInformationDial(options, now, snapshot, inner, dial.ink, dial.quiet)
                     "car" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        PanelCarArt(Modifier.weight(1.2f).fillMaxHeight())
+                        PanelCarArt(Modifier.weight(1.2f).fillMaxHeight(), dial)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 12.dp)) {
                             PanelDialText(time, color = accent, fontSize = carTimeSize, fontFamily = FontFamily.Monospace)
                             PanelDialText(date, color = ink, fontSize = if (compact) 12.sp else 16.sp)
                             DialMessage(options.message, ink, compact)
-                            PanelDialText(stringResource(R.string.control_panel_dial_car_art), color = Color(0xFF8391A5), fontSize = 11.sp, maxLines = 2)
+                            PanelDialText(stringResource(R.string.control_panel_dial_car_art), color = dial.hint, fontSize = 11.sp, maxLines = 2)
                         }
                     }
                     else -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -149,8 +151,8 @@ fun PanelDialScreen(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                PanelDialText(wakeDescription, Modifier.weight(1f), color = if (light) Color(0xFF626C62) else Color(0xFF8391A5), fontSize = 11.sp)
-                if (connection != PanelConnection.READY) PanelDialText(stringResource(R.string.control_panel_offline), color = if (light) Color(0xFF9B403A) else Color(0xFFC06B66), fontSize = 11.sp)
+                PanelDialText(wakeDescription, Modifier.weight(1f), color = dial.hint, fontSize = 11.sp)
+                if (connection != PanelConnection.READY) PanelDialText(stringResource(R.string.control_panel_offline), color = dial.offline, fontSize = 11.sp)
             }
         }
     }
@@ -232,7 +234,8 @@ private fun DialMessage(message: String, color: Color, compact: Boolean = false)
 }
 
 @Composable
-private fun PanelAnalogClock(now: Calendar, modifier: Modifier, circular: Boolean = false) {
+private fun PanelAnalogClock(now: Calendar, modifier: Modifier, circular: Boolean = false,
+    palette: PanelDialPalette = dialPalette(PanelAppearanceMode.SYSTEM, "analog")) {
     val angles = PanelClockAngles.at(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), now.get(Calendar.SECOND))
     val locale = panelDisplayLocale()
     Canvas(modifier.semantics { contentDescription = SimpleDateFormat("HH:mm:ss", locale).format(now.time) }) {
@@ -246,34 +249,34 @@ private fun PanelAnalogClock(now: Calendar, modifier: Modifier, circular: Boolea
         }
         repeat(60) { index ->
             val major = index % 5 == 0
-            drawLine(if (major) Color(0xFFD7DFE7) else Color(0xFF5E6671), point(index * 6f, if (major) 0.86f else 0.94f), point(index * 6f, 1f), if (major) 2.dp.toPx() else 1.dp.toPx())
+            drawLine(if (major) palette.tickMajor else palette.tickMinor, point(index * 6f, if (major) 0.86f else 0.94f), point(index * 6f, 1f), if (major) 2.dp.toPx() else 1.dp.toPx())
         }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textAlign = Paint.Align.CENTER; textSize = minOf(rx, vertical) * 0.2f }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.hand.toArgb(); textAlign = Paint.Align.CENTER; textSize = minOf(rx, vertical) * 0.2f }
         for (hour in listOf(12, 3, 6, 9)) {
             val position = point(hour * 30f, 0.71f)
             drawContext.canvas.nativeCanvas.drawText(hour.toString(), position.x, position.y - (paint.ascent() + paint.descent()) / 2, paint)
         }
-        drawLine(Color.White, point(angles.hour, -0.06f), point(angles.hour, 0.48f), 5.dp.toPx(), StrokeCap.Round)
-        drawLine(Color.White, point(angles.minute, -0.08f), point(angles.minute, 0.72f), 3.dp.toPx(), StrokeCap.Round)
-        drawLine(Color(0xFFDBA353), point(angles.second, -0.15f), point(angles.second, 0.88f), 1.dp.toPx(), StrokeCap.Round)
-        drawCircle(Color(0xFFDBA353), 4.dp.toPx(), center)
+        drawLine(palette.hand, point(angles.hour, -0.06f), point(angles.hour, 0.48f), 5.dp.toPx(), StrokeCap.Round)
+        drawLine(palette.hand, point(angles.minute, -0.08f), point(angles.minute, 0.72f), 3.dp.toPx(), StrokeCap.Round)
+        drawLine(palette.secondHand, point(angles.second, -0.15f), point(angles.second, 0.88f), 1.dp.toPx(), StrokeCap.Round)
+        drawCircle(palette.secondHand, 4.dp.toPx(), center)
     }
 }
 
 @Composable
-private fun PanelCarArt(modifier: Modifier) {
+private fun PanelCarArt(modifier: Modifier, palette: PanelDialPalette = dialPalette(PanelAppearanceMode.SYSTEM, "car")) {
     Canvas(modifier) {
         val left = size.width * 0.06f
         val top = size.height * 0.36f
         val width = size.width * 0.88f
         val height = size.height * 0.28f
-        drawRoundRect(Color(0xFF263D56), Offset(left, top), Size(width, height), CornerRadius(height * 0.28f))
-        drawRoundRect(Color(0xFF94C3ED), Offset(left + width * 0.24f, top - height * 0.42f), Size(width * 0.49f, height * 0.65f), CornerRadius(height * 0.2f), style = Stroke(2.dp.toPx()))
+        drawRoundRect(palette.carBody, Offset(left, top), Size(width, height), CornerRadius(height * 0.28f))
+        drawRoundRect(palette.carGlass, Offset(left + width * 0.24f, top - height * 0.42f), Size(width * 0.49f, height * 0.65f), CornerRadius(height * 0.2f), style = Stroke(2.dp.toPx()))
         listOf(0.2f, 0.8f).forEach { part ->
             val center = Offset(left + width * part, top + height * 0.89f)
-            drawCircle(Color(0xFF111720), height * 0.29f, center)
-            drawCircle(Color(0xFF8AB9E8), height * 0.15f, center, style = Stroke(3.dp.toPx()))
+            drawCircle(palette.carWheel, height * 0.29f, center)
+            drawCircle(palette.carRim, height * 0.15f, center, style = Stroke(3.dp.toPx()))
         }
-        drawLine(Color(0xFF5B9ACF), Offset(left, top + height * 1.28f), Offset(left + width, top + height * 1.28f), 1.dp.toPx())
+        drawLine(palette.carGround, Offset(left, top + height * 1.28f), Offset(left + width, top + height * 1.28f), 1.dp.toPx())
     }
 }

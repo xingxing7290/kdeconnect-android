@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -100,6 +101,8 @@ fun ControlPanelScreen(
     onBack: () -> Unit,
     assetCache: PanelAssetCache? = null,
     onSynchronize: (() -> Unit)? = null,
+    appearanceMode: PanelAppearanceMode = PanelAppearanceMode.SYSTEM,
+    onAppearanceModeChange: ((PanelAppearanceMode) -> Unit)? = null,
 ) {
     val empty = remember { MutableStateFlow(PanelSessionState()) }
     val state by (session?.state ?: empty).collectAsState()
@@ -107,11 +110,20 @@ fun ControlPanelScreen(
     val iconProblem by (plugin?.iconProblem ?: noProblem).collectAsState()
     val config = state.config
     val ready = plugin != null && state.connection == PanelConnection.READY
-    val background = config?.appearance?.background?.let { Color(android.graphics.Color.parseColor(it)) } ?: Color(0xFFF4F6FA)
-    val primary = panelReadableColor(Color(0xFF25334A), background)
-    val secondary = panelReadableColor(Color(0xFF69778B), background)
-    val accent = panelReadableColor(Color(0xFF286FE0), background)
-    val warning = panelReadableColor(Color(0xFFB3261E), background)
+    // SYSTEM keeps the desktop configuration untouched (including custom flat backgrounds).
+    // LIGHT/DARK are phone-local overrides and never change the synced config revision.
+    val themed = appearanceMode != PanelAppearanceMode.SYSTEM
+    val palette = controlPalette(appearanceMode, isSystemInDarkTheme())
+    val background = if (themed) palette.background
+    else config?.appearance?.background?.let { Color(android.graphics.Color.parseColor(it)) } ?: Color(0xFFF4F6FA)
+    val primary = panelReadableColor(if (themed) palette.text else Color(0xFF25334A), background)
+    val secondary = panelReadableColor(if (themed) palette.textMuted else Color(0xFF69778B), background)
+    val accent = panelReadableColor(if (themed) palette.accent else Color(0xFF286FE0), background)
+    val warning = panelReadableColor(if (themed) palette.danger else Color(0xFFB3261E), background)
+    val slotSurface = if (themed) palette.surface else Color(0xFFFBFCFE)
+    val slotBorder = if (themed) palette.border else Color(0xFFDCE1E8)
+    val slotLabel = if (themed) palette.text else Color(0xFF25334A)
+    val slotEmpty = if (themed) palette.empty else Color(0xFF9BA5B4)
     val page = config?.page(state.activePageId) ?: config?.pages?.firstOrNull()
     val pages = if (config?.mode == "single") config.pages.filter { it.id == config.homePageId } else config?.pages.orEmpty()
     fun movePage(direction: Int) {
@@ -151,6 +163,9 @@ fun ControlPanelScreen(
                         IconButton(onClick = { onSynchronize?.invoke() ?: plugin?.synchronize() }, enabled = plugin != null || onSynchronize != null) {
                             Icon(Icons.Default.Refresh, stringResource(R.string.control_panel_retry), tint = primary)
                         }
+                        onAppearanceModeChange?.let { change ->
+                            PanelAppearanceSwitcher(appearanceMode, change, primary)
+                        }
                     }
                     if (!ready) {
                         Text(
@@ -188,18 +203,18 @@ fun ControlPanelScreen(
                                             .alpha(if (ready || button == null) 1f else 0.5f)
                                             .semantics { contentDescription = slotDescription; if (!canActivate) disabled() },
                                         shape = RoundedCornerShape(12.dp),
-                                        color = Color(0xFFFBFCFE),
-                                        border = BorderStroke(1.dp, Color(0xFFDCE1E8)),
+                                        color = slotSurface,
+                                        border = BorderStroke(1.dp, slotBorder),
                                         shadowElevation = 1.dp,
                                     ) {
                                         Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                            if (button == null) Text("+", color = Color(0xFF9BA5B4), fontSize = 28.sp)
+                                            if (button == null) Text("+", color = slotEmpty, fontSize = 28.sp)
                                             else {
                                                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                                     if (button.id in state.pendingButtons) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.dp)
-                                                    else PanelButtonIcon(button, assetCache)
+                                                    else PanelButtonIcon(button, assetCache, if (themed) palette.icon else Color(0xFF4177C3))
                                                 }
-                                                if (config?.appearance?.showLabels == true) Text(button.name, modifier = Modifier.fillMaxWidth().testTag("panel-slot-label-$index"), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = Color(0xFF25334A),
+                                                if (config?.appearance?.showLabels == true) Text(button.name, modifier = Modifier.fillMaxWidth().testTag("panel-slot-label-$index"), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = slotLabel,
                                                     onTextLayout = { renderedLabelHeight = maxOf(renderedLabelHeight, it.size.height) })
                                             }
                                         }
@@ -208,7 +223,7 @@ fun ControlPanelScreen(
                             }
                         }
                     }
-                    if (config?.appearance?.showVolume == true) PanelVolume(volume, ready, background)
+                    if (config?.appearance?.showVolume == true) PanelVolume(volume, ready, background, palette, themed)
                 }
                 Column(Modifier.fillMaxWidth().onSizeChanged { footerHeight = it.height }) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
@@ -224,7 +239,7 @@ fun ControlPanelScreen(
                             if (result.success) stringResource(R.string.control_panel_success)
                             else stringResource(R.string.control_panel_failed, panelErrorMessage(result.error)),
                             modifier = Modifier.fillMaxWidth().testTag("panel-action-result").semantics { liveRegion = LiveRegionMode.Polite },
-                            color = panelReadableColor(if (result.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error, background),
+                            color = panelReadableColor(if (result.success) (if (themed) palette.success else Color(0xFF2E7D32)) else MaterialTheme.colorScheme.error, background),
                             fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -270,14 +285,14 @@ private fun panelErrorMessage(error: String): String = when (error) {
 }
 
 @Composable
-private fun PanelButtonIcon(button: PanelButton, cache: PanelAssetCache?) {
+private fun PanelButtonIcon(button: PanelButton, cache: PanelAssetCache?, iconTint: Color = Color(0xFF4177C3)) {
     val noChanges = remember { MutableStateFlow(0L) }
     val version by (cache?.changes ?: noChanges).collectAsState()
     val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, button.icon, version) {
         value = withContext(Dispatchers.IO) { cache?.bitmap(button.icon)?.asImageBitmap() }
     }
     if (image != null) Image(checkNotNull(image), null, Modifier.size(48.dp).testTag("panel-button-image-${button.id}"), contentScale = ContentScale.Fit)
-    else Icon(painterResource(buttonIcon(button.kind)), null, Modifier.size(30.dp), tint = Color(0xFF4177C3))
+    else Icon(painterResource(buttonIcon(button.kind)), null, Modifier.size(30.dp), tint = iconTint)
 }
 
 private fun buttonIcon(kind: String) = when (kind) {
@@ -292,7 +307,8 @@ private data class VolumeState(val sink: Sink? = null, val volume: Int = 0, val 
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean, background: Color) {
+private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean, background: Color,
+    palette: PanelPalette = controlPalette(PanelAppearanceMode.SYSTEM), themed: Boolean = false) {
     var state by remember(plugin) { mutableStateOf(VolumeState()) }
     DisposableEffect(plugin) {
         val main = Handler(Looper.getMainLooper())
@@ -329,9 +345,12 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean, backgroun
     val drag = remember(plugin) { PanelVolumeDrag(SystemClock::elapsedRealtime) { name, value -> plugin?.sendVolume(name, value) } }
     var chooseOutput by remember { mutableStateOf(false) }
     val interactive = enabled && state.sink != null
-    val foreground = panelReadableColor(Color(0xFF69778B), background)
-    val accent = panelReadableColor(Color(0xFF286FE0), background)
-    val sliderColors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent, inactiveTrackColor = Color(0xFFDCE5F5))
+    val foreground = panelReadableColor(if (themed) palette.textMuted else Color(0xFF69778B), background)
+    val accent = panelReadableColor(if (themed) palette.accent else Color(0xFF286FE0), background)
+    val inactiveTrack = if (themed) palette.sliderTrack else Color(0xFFDCE5F5)
+    val inactiveThumb = if (themed) palette.empty else Color(0xFF9BA5B4)
+    val thumbBorder = if (themed) palette.surface else Color.White
+    val sliderColors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent, inactiveTrackColor = inactiveTrack)
     Column(Modifier.width(56.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             IconButton(onClick = { chooseOutput = true }, enabled = enabled && plugin?.sinks?.isNotEmpty() == true) {
@@ -355,7 +374,7 @@ private fun PanelVolume(plugin: SystemVolumePlugin?, enabled: Boolean, backgroun
                 valueRange = 0f..state.maximum.toFloat(),
                 enabled = interactive,
                 colors = sliderColors,
-                thumb = { Box(Modifier.size(20.dp).background(if (interactive) accent else Color(0xFF9BA5B4), CircleShape).border(2.dp, Color.White, CircleShape)) },
+                thumb = { Box(Modifier.size(20.dp).background(if (interactive) accent else inactiveThumb, CircleShape).border(2.dp, thumbBorder, CircleShape)) },
                 track = { sliderState ->
                     SliderDefaults.Track(sliderState, Modifier.height(6.dp), interactive, sliderColors, drawStopIndicator = null, thumbTrackGapSize = 0.dp)
                 },

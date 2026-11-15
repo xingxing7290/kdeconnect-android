@@ -16,6 +16,9 @@ import com.google.android.material.color.DynamicColors
  * Utilities for working with android [Themes][android.content.res.Resources.Theme].
  */
 object ThemeUtil {
+    /** Key of the app-wide theme preference shared by SettingsFragment, KdeTheme and this class. */
+    const val KEY_THEME_PREF: String = "theme_pref"
+
     @Suppress("MemberVisibilityCanBePrivate")
     const val LIGHT_MODE: String = "light"
     @Suppress("MemberVisibilityCanBePrivate")
@@ -54,7 +57,7 @@ object ThemeUtil {
     fun setUserPreferredTheme(application: Application) {
         val appTheme = PreferenceManager
             .getDefaultSharedPreferences(application)
-            .getString("theme_pref", DEFAULT_MODE)!!
+            .getString(KEY_THEME_PREF, DEFAULT_MODE)!!
         DynamicColors.applyToActivitiesIfAvailable(application)
         applyTheme(appTheme)
     }

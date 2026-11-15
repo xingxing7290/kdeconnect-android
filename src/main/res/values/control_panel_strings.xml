@@ -61,4 +61,18 @@
     <string name="control_panel_appearance_system">Follow system</string>
     <string name="control_panel_appearance_light">Light mode</string>
     <string name="control_panel_appearance_dark">Dark mode</string>
+    <string name="control_panel_info_notes_hint">Set notes on the computer</string>
+    <string name="control_panel_progress_title">Work progress</string>
+    <string name="control_panel_progress_waiting">Waiting for WorkBuddy progress</string>
+    <string name="control_panel_progress_stale">Progress expired, waiting for an update</string>
+    <string name="control_panel_progress_offline">Offline · last known progress</string>
+    <string name="control_panel_progress_percent">%1$d%%</string>
+    <string name="control_panel_progress_updated_seconds">Updated %1$d s ago</string>
+    <string name="control_panel_progress_updated_minutes">Updated %1$d min ago</string>
+    <string name="control_panel_progress_running">Running</string>
+    <string name="control_panel_progress_idle">Idle</string>
+    <string name="control_panel_progress_done">Done</string>
+    <string name="control_panel_progress_error">Error</string>
+    <string name="control_panel_progress_paused">Paused</string>
+    <string name="control_panel_progress_unavailable">Unavailable</string>
 </resources>

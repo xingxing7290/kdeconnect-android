@@ -21,6 +21,7 @@ data class PanelSessionState(
     val lastResult: PanelResult? = null,
     val error: String = "",
     val weather: PanelWeatherSnapshot? = null,
+    val progress: PanelWorkProgress? = null,
 )
 
 @Serializable
@@ -83,6 +84,20 @@ class PanelSession(
             snapshot = snapshot.withObservation(previous)
         } else if (older) return false
         mutableState.value = current.copy(weather = snapshot)
+        return true
+    }
+
+    /** Live progress is accepted only inside a READY session with the current config revision. */
+    @Synchronized
+    fun receiveProgress(revision: Long, raw: String, now: Long = System.currentTimeMillis() / 1000): Boolean {
+        val current = mutableState.value
+        val config = current.config ?: return false
+        if (current.connection != PanelConnection.READY || revision != config.revision) return false
+        val snapshot = PanelWorkProgress.parse(raw) ?: return false
+        if (snapshot.updatedAt > now + 60 || snapshot.fetchedAt > now + 60) return false
+        val previous = current.progress
+        if (previous != null && (snapshot.sequence < previous.sequence || snapshot.fetchedAt < previous.fetchedAt)) return false
+        mutableState.value = current.copy(progress = snapshot)
         return true
     }
 

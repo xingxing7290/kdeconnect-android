@@ -61,4 +61,18 @@
     <string name="control_panel_appearance_system">跟随系统</string>
     <string name="control_panel_appearance_light">明亮模式</string>
     <string name="control_panel_appearance_dark">黑暗模式</string>
+    <string name="control_panel_info_notes_hint">可在电脑端设置备注</string>
+    <string name="control_panel_progress_title">工作进度</string>
+    <string name="control_panel_progress_waiting">等待 WorkBuddy 进度</string>
+    <string name="control_panel_progress_stale">进度已过期，等待更新</string>
+    <string name="control_panel_progress_offline">离线 · 最后一次进度</string>
+    <string name="control_panel_progress_percent">%1$d%%</string>
+    <string name="control_panel_progress_updated_seconds">%1$d 秒前更新</string>
+    <string name="control_panel_progress_updated_minutes">%1$d 分钟前更新</string>
+    <string name="control_panel_progress_running">进行中</string>
+    <string name="control_panel_progress_idle">空闲</string>
+    <string name="control_panel_progress_done">已完成</string>
+    <string name="control_panel_progress_error">出错</string>
+    <string name="control_panel_progress_paused">已暂停</string>
+    <string name="control_panel_progress_unavailable">暂不可用</string>
 </resources>

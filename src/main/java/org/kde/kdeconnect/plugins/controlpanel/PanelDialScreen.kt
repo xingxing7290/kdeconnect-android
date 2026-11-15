@@ -73,6 +73,7 @@ fun PanelDialScreen(
     weather: PanelWeatherSnapshot? = null,
     localWeather: PanelWeatherSnapshot? = null,
     appearanceMode: PanelAppearanceMode = PanelAppearanceMode.SYSTEM,
+    progress: PanelWorkProgress? = null,
 ) {
     var now by remember { mutableStateOf(Calendar.getInstance()) }
     LaunchedEffect(Unit) {
@@ -130,7 +131,8 @@ fun PanelDialScreen(
                             DialMessage(options.message, ink, weatherCompact)
                         }
                     }
-                    "info" -> PanelInformationDial(options, now, snapshot, inner, dial.ink, dial.quiet)
+                    "info" -> PanelInformationDial(options, now, snapshot, inner, dial.ink, dial.quiet,
+                        progress = progress, connection = connection, nowSeconds = now.timeInMillis / 1000)
                     "car" -> Row(inner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         PanelCarArt(Modifier.weight(1.2f).fillMaxHeight(), dial)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 12.dp)) {

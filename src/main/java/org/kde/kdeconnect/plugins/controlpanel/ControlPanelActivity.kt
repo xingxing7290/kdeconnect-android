@@ -77,7 +77,8 @@ class ControlPanelActivity : AppCompatActivity() {
                 LaunchedEffect(state.config?.idle) { idle.configure(state.config?.idle) }
                 if (showing && state.config != null) {
                     PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() },
-                        weather = state.weather, localWeather = localWeather, appearanceMode = appearanceMode)
+                        weather = state.weather, localWeather = localWeather, appearanceMode = appearanceMode,
+                        progress = state.progress)
                 } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume,
                     onBack = { finish() }, assetCache = PanelAssetCache.get(this), onSynchronize = {
                         val current = plugin

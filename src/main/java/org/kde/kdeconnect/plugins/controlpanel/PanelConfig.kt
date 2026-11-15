@@ -43,6 +43,8 @@ data class PanelConfig(
         require(idle.timeoutMs in 1_000..86_400_000) { "invalid_idle_timeout" }
         require(idle.dialId in DIALS) { "invalid_dial" }
         require(idle.city.length <= 120 && idle.message.length <= 240) { "invalid_dial_text" }
+        require(idle.info.notes.size <= 4 && idle.info.notes.all { it.length <= 120 && it.none(Char::isISOControl) }) { "invalid_dial_text" }
+        require(idle.info.staleMs in 5_000..120_000) { "invalid_dial_text" }
     }
 
     fun page(id: String): PanelPage? = pages.find { it.id == id }
@@ -99,4 +101,14 @@ data class PanelIdle(
     val dialId: String,
     val city: String,
     val message: String,
+    val info: PanelInfo = PanelInfo(),
+)
+
+/** Public-side configuration of the information dial's right column. Desktop-only source fields are never sent. */
+@Serializable
+data class PanelInfo(
+    val notes: List<String> = emptyList(),
+    val showForecast: Boolean = true,
+    val showProgress: Boolean = false,
+    val staleMs: Int = 15_000,
 )

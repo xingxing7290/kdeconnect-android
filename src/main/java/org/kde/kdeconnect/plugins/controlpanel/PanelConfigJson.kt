@@ -41,6 +41,17 @@ internal object PanelConfigJson {
             boolean("enabled")
             integer("timeoutMs")
             strings("dialId", "city", "message")
+            if ("info" in this) {
+                val info = objectValue(get("info"))
+                if ("notes" in info) {
+                    arrayValue(info["notes"]).forEach { note ->
+                        require(note is JsonPrimitive && note.isString) { "invalid_config_type" }
+                    }
+                }
+                if ("showForecast" in info) info.boolean("showForecast")
+                if ("showProgress" in info) info.boolean("showProgress")
+                if ("staleMs" in info) info.integer("staleMs")
+            }
         }
         return root
     }

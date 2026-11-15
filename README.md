@@ -2,6 +2,8 @@
 
 ## KDE 控制台开发分支
 
+换机开发请先看[接续指南](docs/control-panel/DEVELOPER-HANDOFF.zh-CN.md)。Android 签名 Release alpha.3 与 Windows Release alpha.4 已公开；以下较早的“仅本地/待推送”描述是历史快照，不覆盖接续指南中的当前状态。
+
 当前 master 的[阶段二十三](docs/control-panel/MILESTONE-23-PANEL-CONTRAST.zh-CN.md) 已修复 Android 主控制页自选背景字色不足和大字号/多提示挤压网格；拥挤时可滚动，按实际标签高度保留图标空间。最终 45 套件/304 项通过，Lint 新报告仍有 493 错误。新 APK 仅本地内部候选，没有更新下方已发布 alpha.3，也未进行实体手机/模拟器或桌面端本轮验证。
 
 当前预览小版本为 [0.1.0-alpha.3](docs/control-panel/PREVIEW-0.1.0-alpha.3.zh-CN.md)：提供新的 Android 调试 APK，包含窄屏/大字表盘与文字对比度修复；[GitHub 下载](https://github.com/xingxing7290/kdeconnect-android/releases/tag/controlpanel-v0.1.0-alpha.3)。Android 298 项、Windows 22/22 通过，Lint 仍有 493 错误。Windows 新 ZIP 仅本地内部使用，桌面源码推送待确认。下方 alpha.1 / alpha.2 及“本轮仅本地”描述为历史阶段记录，以本段和新版说明为准，旧标签及附件不覆盖。

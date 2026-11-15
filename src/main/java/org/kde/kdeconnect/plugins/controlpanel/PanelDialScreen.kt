@@ -65,7 +65,13 @@ internal fun PanelDialText(text: String, modifier: Modifier = Modifier, color: C
 }
 
 @Composable
-fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () -> Unit, weather: PanelWeatherSnapshot? = null) {
+fun PanelDialScreen(
+    options: PanelIdle,
+    connection: PanelConnection,
+    onWake: () -> Unit,
+    weather: PanelWeatherSnapshot? = null,
+    localWeather: PanelWeatherSnapshot? = null,
+) {
     var now by remember { mutableStateOf(Calendar.getInstance()) }
     LaunchedEffect(Unit) {
         while (isActive) {
@@ -80,7 +86,15 @@ fun PanelDialScreen(options: PanelIdle, connection: PanelConnection, onWake: () 
     val ink = if (light) Color(0xFF202722) else Color(0xFFF5F7FA)
     val accent = if (light) ink else Color(0xFF85B4FF)
     val wakeDescription = stringResource(R.string.control_panel_dial_wake)
-    val snapshot = weather?.takeIf { it.city == options.city.trim() }?.let {
+    val nowSeconds = now.timeInMillis / 1000
+    val remote = weather?.takeIf { it.city == options.city.trim() }
+    // A phone-side snapshot carries its own resolved place, so it is not tied to the configured city.
+    val local = localWeather
+    // Prefer the desktop snapshot while fresh; never replace a stale observation with an empty
+    // local status, and do not degrade phone-side data when the KDE Connect link drops.
+    val snapshot = if (local != null && remote?.fresh(nowSeconds) != true && (local.hasObservation || remote == null)) {
+        local
+    } else remote?.let {
         if (connection != PanelConnection.READY && it.status == "ready") it.copy(status = "unavailable") else it
     }
     val cityLabel = snapshot?.resolvedCity ?: options.city.ifBlank { stringResource(R.string.control_panel_dial_no_city) }

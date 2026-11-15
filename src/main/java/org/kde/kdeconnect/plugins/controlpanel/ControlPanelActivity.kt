@@ -11,16 +11,25 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.addCallback
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.KdeConnect
@@ -58,9 +67,15 @@ class ControlPanelActivity : AppCompatActivity() {
             KdeTheme(this) {
                 val state by (displaySession?.state ?: emptySession.state).collectAsState()
                 val showing by idle.showing.collectAsState()
+                val dialOptions = state.config?.idle
+                val localWeather by rememberLocalWeather(
+                    enabled = dialOptions?.let { it.enabled && (it.dialId == "weather" || it.dialId == "info" || it.city.isNotBlank()) } == true,
+                    city = dialOptions?.city?.trim().orEmpty(),
+                )
                 LaunchedEffect(state.config?.idle) { idle.configure(state.config?.idle) }
                 if (showing && state.config != null) {
-                    PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() }, weather = state.weather)
+                    PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() },
+                        weather = state.weather, localWeather = localWeather)
                 } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume,
                     onBack = { finish() }, assetCache = PanelAssetCache.get(this), onSynchronize = {
                         val current = plugin
@@ -130,4 +145,32 @@ class ControlPanelActivity : AppCompatActivity() {
     }
 
     companion object { const val DEVICE_ID = "deviceId" }
+}
+
+/** Phone-side weather for the idle dial. Asks for location once, then refreshes every 15 minutes. */
+@Composable
+private fun rememberLocalWeather(enabled: Boolean, city: String): State<PanelWeatherSnapshot?> {
+    val context = LocalContext.current
+    var permissionSettled by remember { mutableStateOf(!enabled || PanelLocalWeather.hasLocationPermission(context)) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionSettled = true
+    }
+    LaunchedEffect(enabled) {
+        if (enabled && !PanelLocalWeather.hasLocationPermission(context)) {
+            launcher.launch(PanelLocalWeather.LOCATION_PERMISSIONS)
+        }
+    }
+    return produceState<PanelWeatherSnapshot?>(null, enabled, city, permissionSettled) {
+        if (!enabled) {
+            value = null
+            return@produceState
+        }
+        val provider = PanelLocalWeather(context)
+        value = provider.cached()
+        while (isActive) {
+            val result = provider.fetch(city)
+            if (result != null) value = result
+            delay(15 * 60 * 1000L)
+        }
+    }
 }

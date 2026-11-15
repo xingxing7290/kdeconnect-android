@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// gradlew assembleRelease --init-script packaging/controlpanel/personal-release.init.gradle
+// Sign the resulting APK with the personal fork key, never the public debug key.
+allprojects {
+    plugins.withId('com.android.application') {
+        android.buildTypes.release {
+            applicationIdSuffix = '.controlpanel'
+            versionNameSuffix = '-controlpanel-0.1.0-alpha.3'
+        }
+    }
+}

@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -84,7 +85,7 @@ class ControlPanelActivity : AppCompatActivity() {
                         val current = plugin
                         if (current != null && device?.isReachable == true) current.synchronize()
                         else BackgroundService.ForceRefreshConnections(this)
-                    }, appearanceMode = appearanceMode, onAppearanceModeChange = ::setAppearanceMode)
+                    }, appearanceMode = appearanceMode, onAppearanceModeChange = ::updateAppearanceMode)
             }
         }
     }
@@ -122,7 +123,7 @@ class ControlPanelActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun setAppearanceMode(mode: PanelAppearanceMode) {
+    private fun updateAppearanceMode(mode: PanelAppearanceMode) {
         appearanceMode = mode
         PanelAppearanceStore.write(this, mode)
     }
@@ -155,26 +156,26 @@ class ControlPanelActivity : AppCompatActivity() {
     companion object { const val DEVICE_ID = "deviceId" }
 }
 
-/** Phone-side weather for the idle dial. Asks for location once, then refreshes every 15 minutes. */
+/** Phone-side weather for the idle dial. Automatic location may request permission. */
 @Composable
-private fun rememberLocalWeather(enabled: Boolean, city: String): State<PanelWeatherSnapshot?> {
+internal fun rememberLocalWeather(enabled: Boolean, city: String): State<PanelWeatherSnapshot?> {
     val context = LocalContext.current
-    var permissionSettled by remember { mutableStateOf(!enabled || PanelLocalWeather.hasLocationPermission(context)) }
+    var permissionResultVersion by remember { mutableIntStateOf(0) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        permissionSettled = true
+        permissionResultVersion++
     }
-    LaunchedEffect(enabled) {
-        if (enabled && !PanelLocalWeather.hasLocationPermission(context)) {
+    LaunchedEffect(enabled, city) {
+        if (enabled && city.isBlank() && !PanelLocalWeather.hasLocationPermission(context)) {
             launcher.launch(PanelLocalWeather.LOCATION_PERMISSIONS)
         }
     }
-    return produceState<PanelWeatherSnapshot?>(null, enabled, city, permissionSettled) {
+    return produceState<PanelWeatherSnapshot?>(null, enabled, city, permissionResultVersion) {
         if (!enabled) {
             value = null
             return@produceState
         }
         val provider = PanelLocalWeather(context)
-        value = provider.cached()
+        value = provider.cached(city)
         while (isActive) {
             val result = provider.fetch(city)
             if (result != null) value = result

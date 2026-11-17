@@ -13,9 +13,9 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.content
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -36,31 +36,41 @@ import java.util.Locale
  *
  * The desktop peer still owns the shared configuration and may push its own DIAL snapshot. This
  * class only provides a fallback for the case where no usable snapshot arrives: it resolves the
- * current place from the device location (falling back to the configured city name via the same
- * Open-Meteo geocoding service the desktop uses) and builds a snapshot through
+ * configured city, or the device location if no city is configured, and builds a snapshot through
  * [PanelWeatherSnapshot.parse], so every value keeps the protocol's validation rules. A failed
  * request never invents a temperature or a city: it either keeps the cached observation or returns
  * an explicit `unavailable` status.
  */
-class PanelLocalWeather(context: Context) {
+class PanelLocalWeather internal constructor(
+    context: Context,
+    private val testRequest: ((String) -> JsonObject?)? = null,
+) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
     private data class Place(val latitude: Double, val longitude: Double, val label: String?)
 
     /** Last successful observation, kept across restarts. The caller decides whether it is fresh. */
-    fun cached(): PanelWeatherSnapshot? =
-        preferences.getString(KEY_SNAPSHOT, null)?.let { PanelWeatherSnapshot.parse(it) }
+    fun cached(configuredCity: String): PanelWeatherSnapshot? {
+        val requestedCity = configuredCity.trim()
+        if (!preferences.contains(KEY_CITY) || preferences.getString(KEY_CITY, null) != requestedCity) return null
+        return preferences.getString(KEY_SNAPSHOT, null)?.let { PanelWeatherSnapshot.parse(it) }
+    }
 
     suspend fun fetch(configuredCity: String): PanelWeatherSnapshot? = withContext(Dispatchers.IO) {
         val requestedCity = configuredCity.trim()
-        val place = currentPlace(requestedCity)
-        val snapshot = if (place == null) null else forecast(place)
+        // A successful HTTP response can still contain unexpected JSON types.
+        // Treat malformed provider data like a failed request and keep the matching cache.
+        val snapshot = try {
+            currentPlace(requestedCity)?.let { forecast(it) }
+        } catch (_: IllegalArgumentException) {
+            null
+        }
         if (snapshot != null) {
-            preferences.edit().putString(KEY_SNAPSHOT, snapshot.encode()).apply()
+            preferences.edit().putString(KEY_CITY, requestedCity).putString(KEY_SNAPSHOT, snapshot.encode()).apply()
             return@withContext snapshot
         }
-        cached() ?: PanelWeatherSnapshot(requestedCity, "unavailable", SOURCE)
+        cached(requestedCity) ?: PanelWeatherSnapshot(requestedCity, "unavailable", SOURCE)
     }
 
     private fun currentPlace(city: String): Place? {
@@ -69,6 +79,7 @@ class PanelLocalWeather(context: Context) {
             for (name in listOf(city, city.removeSuffix("市")).distinct()) {
                 geocode(name)?.let { return it }
             }
+            return null
         }
         lastKnownLocation()?.let { return Place(it.latitude, it.longitude, null) }
         return null
@@ -79,7 +90,13 @@ class PanelLocalWeather(context: Context) {
         val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
         return runCatching {
             manager.getProviders(true).orEmpty()
-                .mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
+                .mapNotNull { provider ->
+                    try {
+                        manager.getLastKnownLocation(provider)
+                    } catch (_: SecurityException) {
+                        null
+                    }
+                }
                 .maxByOrNull { it.time }
         }.getOrNull()
     }
@@ -137,6 +154,13 @@ class PanelLocalWeather(context: Context) {
             val items = mutableListOf<PanelForecastDay>()
             var complete = true
             for (index in 0 until 3) {
+                val dayTime = (times[index] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull
+                val expectedDate = PanelWeatherSnapshot.dateAtOffset(fetchedAt + offset + index * 86_400L, 0)
+                if (dayTime == null || dayTime !in 0..4_102_444_800L ||
+                    PanelWeatherSnapshot.dateAtOffset(dayTime + offset, 0) != expectedDate) {
+                    complete = false
+                    break
+                }
                 val dayMinimum = minimums[index].jsonPrimitive.doubleOrNull
                 val dayMaximum = maximums[index].jsonPrimitive.doubleOrNull
                 val dayCode = codes[index].jsonPrimitive.intOrNull
@@ -145,7 +169,7 @@ class PanelLocalWeather(context: Context) {
                     break
                 }
                 items += PanelForecastDay(
-                    PanelWeatherSnapshot.dateAtOffset(fetchedAt + offset + index * 86_400L, 0),
+                    expectedDate,
                     dayMinimum, dayMaximum, dayCode,
                 )
             }
@@ -201,6 +225,7 @@ class PanelLocalWeather(context: Context) {
     private fun clean(value: String, maximum: Int): String = value.filterNot(Char::isISOControl).trim().take(maximum)
 
     private fun fetchJson(urlText: String): JsonObject? {
+        testRequest?.let { return it(urlText) }
         val connection = URL(urlText).openConnection() as? HttpURLConnection ?: return null
         try {
             connection.connectTimeout = 10_000
@@ -231,6 +256,7 @@ class PanelLocalWeather(context: Context) {
         private const val SOURCE = "open-meteo"
         private const val PREFERENCES = "panel_local_weather"
         private const val KEY_SNAPSHOT = "snapshot"
+        private const val KEY_CITY = "configured_city"
         private const val MAX_RESPONSE = 65_536
         private const val GEOCODING = "https://geocoding-api.open-meteo.com/v1/search"
         private const val FORECAST = "https://api.open-meteo.com/v1/forecast"

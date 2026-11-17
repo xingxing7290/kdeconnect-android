@@ -1,5 +1,86 @@
 # 构建与测试记录
 
+2026-11-16 天气日期边界只读复核：针对未来夏令时变化是否应逐日切换偏移，重新核对 [Open-Meteo 接口说明](https://open-meteo.com/en/docs)：其本次响应中的 `utc_offset_seconds` 在整份响应中固定，日边界也采用该固定偏移，包括跨夏令时变化；Unix 时间按该偏移还原接口日期。因此当前预报日期校验不应仅因真实时区稍后切换夏令时就改用设备时区或逐日偏移。本次未联网查询真实天气、未修改运行代码；已运行的固定偏移模拟测试不能代替真实跨夏令时集成验收。
+
+2026-11-16 三种定位权限组合纳入完整回归：`testDebugUnitTest` 成功，51 套件、343 项、0 失败/错误/跳过，原始 XML 保存于 `D:/KDEBuild/controlpanel-e2e-current/reports/android-permission-three-full-29c0c1790f144bc08b7327fae2948e96`。此次只改测试并运行单元测试，未重新构建 APK 或运行 Lint；此前 13702 候选运行代码不因这次测试调整而变化。真实 GPS、双端和完整验收仍未完成。
+
+2026-11-16 定位权限组合定向补充：将回调模拟为同时包含粗略与精确权限结果，并分别覆盖全部拒绝、仅粗略允许、仅精确允许；SDK 28/37 共 6 项通过，XML 位于 `D:/KDEBuild/controlpanel-e2e-current/reports/weather-three-permissions-85fa77e4e46442d0acacde0af31eb7a0`。仅测试代码变化，没有重跑完整套件，之前的 341 项完整结果是此前测试集合；模拟的精确权限组合不代表各 Android 版本都会在真实授权界面产生该组合，也不验证真实 GPS 或网络。
+
+2026-11-16 新候选模拟器升级：独立 ADB 5038 指定 `emulator-5580`，核对 AVD 名为 `KDEPanelPublishedUpgradeE`，Wi-Fi 和移动数据均为关闭；升级前已安装 13701，其 APK SHA-256 为 `02FE8EE493828F9A33643F503CBE80EAF96DF33212FA94CE162F15B6C87A79F4`。安装本地签名 13702 成功，安装后版本、APK SHA-256 `669E2853ECA82002AEE7FF01872349171334C4F21AD1722F0174015FBC90424A` 和原通知权限保留均已核对；显式启动 MainActivity 后进程存活，并保存设备列表 UI 树与截图至 `E:/KDEConnectTestData/upgrade-13702-evidence-a46a179d0c2240588a5fb886387f1230`。测试结束关闭该模拟器；ADB 列表中另有离线 `emulator-5584`，未操作，因而未关闭共享 ADB 服务。此检查仅覆盖 13701 到 13702 的升级、通知权限与主界面启动，不验证配对数据、真实位置、控制面板或双端；没有安装实体手机。
+
+2026-11-16 当前源码 Android Release 本地候选：在 E 盘独立目录 `E:/KDEConnectTestData/current-release-20261116-build` 离线构建优化版本，`assembleRelease` 成功（4 分 24 秒）。使用既有个人密钥签名后，候选为 `E:/KDEConnectTestData/kdeconnect-controlpanel-local-13702-20261116.apk`，包名 `org.kde.kdeconnect_tp.controlpanel`、versionCode 13702、版本名 `1.37.0-controlpanel-local-test`，SHA-256 `669E2853ECA82002AEE7FF01872349171334C4F21AD1722F0174015FBC90424A`。apksigner 验证 v1/v2/v3 签名成功，证书 SHA-256 为 `DFB388D6FA81CE65B8FBB0B2895C765DBCA4342A9003961E65E00B56E4E29058`，zipalign 4 字节检查通过；apksigner 同时对若干 META-INF 条目报告 v1 签名覆盖警告。该包包含本地权限回调修复，尚未安装或升级测试、未进行真实双端验证、未公开发布；当前 Lint 错误仍未解决，13702 是本地候选版本并非正式发行号。
+
+2026-11-16 权限回调修复后重跑 `lintDebug`：491 Error、20 Fatal、214 Warning、1 Hint；按 issue ID 与消息比较此前天气日期修复后的报告，没有条目差异。错误级问题包括 490 MissingTranslation、20 ExtraTranslation 和 1 MissingLeanbackLauncher。报告保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/lint-permission-current-506116eaf3424e5b9a55530f009718db`。项目设置 `abortOnError=false`，因此 Gradle 成功不表示 Lint 通过；未修改翻译或其他模块。
+
+2026-11-16 定位权限回调补充回归：在 SDK 28 和 37 上分别模拟允许与拒绝两种权限回调，验证天气从关闭切换到开启后的本地缓存刷新；不访问真实定位或天气网络。完整 `testDebugUnitTest assembleDebug` 成功，51 套件、341 项，0 失败/错误/跳过，XML 保存于 `D:/KDEBuild/controlpanel-e2e-current/reports/android-permission-both-full-dadab36dcb31431db397c9a5b252b6d6`；Debug APK SHA-256 仍为 `CB0E6A4D254C83F3FFAC6A53C05F89D71C124CDF3E9953610C9B5644C4B9B458`。此前 Release 候选不包含权限修复，Lint 未重跑；真实定位、实际双端及发行验收尚未完成。
+
+2026-11-16 自动定位权限回调刷新修复：天气初始关闭再开启时，原布尔状态已为 true，权限结果回调再次赋 true 不触发刷新，可能等待 15 分钟。改为每次回调递增刷新版本，不改变权限范围或其他插件。最终相同测试夹具对照旧逻辑在 SDK 28/37 均失败（`D:/KDEBuild/controlpanel-e2e-current/reports/weather-permission-confirmed-before-f135e379a73b48cbb2186c010d919508`），新逻辑定向通过（`reports/weather-permission-passing-ac082cea814240059c708960c4db28d5`）；中间一次修复后测试因夹具未等待重组失败保留在 `reports/weather-permission-retry-fbe7d43f13f54d2594795c110d3b2831`。完整 `testDebugUnitTest assembleDebug` 为 51 套件、339 项、0 失败/错误/跳过，XML 位于 `reports/android-weather-permission-full-026814e0edd94fa190f2d02e3aa2e516`；新 Debug APK SHA-256 `CB0E6A4D254C83F3FFAC6A53C05F89D71C124CDF3E9953610C9B5644C4B9B458`。测试模拟权限拒绝回调及本地缓存，不等于真实授权/GPS 或双端验证；之前的 Release 候选和其模拟器升级不包含本修复，Lint 尚未重跑。
+
+2026-11-16 已公开版本到本地候选的升级补充：D 盘空间不足后，在 E 盘 `E:/KDEConnectTestData/published-upgrade-20261116` 新建独立 AVD `KDEPanelPublishedUpgradeE`，构建/日志仍用 D 盘。只读查询 GitHub Release API，确认公开 alpha.3 APK 摘要与本地原包一致（`77BC5B59EA7D8ABF1ABF0DBB50C69B23B1459D93A334066F5347CCB48FB7F0E2`）。核对独立 ADB 5038、模拟器身份及目标包未安装，关闭 Wi-Fi/移动数据后安装原包 13700；设置 Dark 和模拟器通知权限，再以同签名本地 13701 候选升级，安装成功，哈希 `02FE8EE493828F9A33643F503CBE80EAF96DF33212FA94CE162F15B6C87A79F4` 一致，通知权限及 Dark 主题保留，主界面进程存活。升级前后 UI 树分别为 `ui-49fbfc4cc05f419889f53f8f73b12c54.xml` 和 `ui-ecd45592ef1a43019052370b9920d7ec.xml`，位于 `D:/KDEBuild/controlpanel-e2e-current/published-upgrade-e-be23c3b4943842a09de25618ae5eec67/ui`。此验证覆盖公开包到候选包的安装、授权及全局主题保留，不含已配对设备、私有配置迁移或真实双端；模拟器和独立 ADB 已关闭，E 盘测试数据保留，未操作实体手机。
+
+2026-11-16 从已公开 alpha.3 升级的专用模拟器准备未完成：原 `avdmanager.bat` 因找不到 findstr/JDK 检查失败，直接调用已核对的 JDK 21 和 SDK 工具创建独立 AVD 后，冷启动连续报告 D 盘约 3187 MiB 可用、创建数据分区需要约 7373 MiB；指定较小 `-partition-size` 和调整该新 AVD 的测试配置后仍被同一检查拒绝。失败日志分别在 `D:/KDEBuild/controlpanel-e2e-current/published-upgrade-smoke-eb095281eae645228faef1425ab36567`、`published-upgrade-retry-7fd6ac8171d54b839dcc9109725895e1`、`published-upgrade-small-75574a5cc10842c5a74aa794a78d65d3`。失败的测试目录及不完整 AVD 保留，未删除用户文件；模拟器未启动、独立 ADB 已关闭，未安装公开版，不能声称公开版升级通过。需要在 D 盘额外腾出约 5 GiB 后再以新目录重试，或由用户指定有足够空间的其他盘。
+
+2026-11-16 本地 Release 升级验证：个人 fork 构建入口增加可选 versionCode/标签；无参数保留原默认值，显式 code 需大于项目基础值；code 13700 的负向配置检查被拒。使用 13701、`local-test` 独立构建并以同一个人密钥签名，证书与旧包一致，APK SHA-256 `02FE8EE493828F9A33643F503CBE80EAF96DF33212FA94CE162F15B6C87A79F4`。在专用 `KDEPanelCurrentE2E4`、独立 ADB 5038 中先核对已安装包哈希和 13700，设置 Dark 主题，再安装升级；安装后为 13701、APK 哈希一致、通知权限和 Dark 主题仍在，主界面进程存活。截图与 UI 树在 `D:/KDEBuild/controlpanel-e2e-current/release-upgrade-smoke-be3daeb7eee84d8caeff60884a3ae157/ui`。旧的 13700 测试包本身也是本轮当前代码，不是已公开 alpha.3 原始 APK，因此此检查仅证明本地候选之间的升级及上述设置保留，不证明从公开版跨版本升级或配对数据迁移。专用模拟器及独立 ADB 已关闭，未操作实体手机；候选未发布，正式版本号仍需确认并高于实际已公开版本。
+
+2026-11-16 最新 Release 本地签名与模拟器启动：用既有个人 fork 密钥对独立未签名候选签名，APK v1/v2/v3 验证通过（工具仍报告部分 META-INF 项的 v1 警告），证书 SHA-256 为 `DFB388D6FA81CE65B8FBB0B2895C765DBCA4342A9003961E65E00B56E4E29058`；本地签名 APK 和模拟器安装文件 SHA-256 均为 `9635FAA13177F7A25813CCB81D76FBF446927FB3697155DE05FF656A579EBE07`。核对独立 ADB 5038、`emulator-5580` 的 `KDEPanelCurrentE2E4` 身份及目标包未安装后，关闭该模拟器 Wi-Fi/移动数据，不使用 `-r` 安装；主界面进程启动、设备列表显示 No devices。首次尝试用 UI 辅助脚本选择系统权限弹窗被其应用包过滤保护拒绝，未输入；随后仅在该模拟器为候选包授予通知权限并重启，截图和 UI 树位于 `D:/KDEBuild/controlpanel-e2e-current/signed-release-smoke-aa9c1998390d48299530217ff2a4fef3/ui`。模拟器与独立 ADB 已关闭，未操作实体手机；测试 Release 包保留在专用 AVD 中，网络开关已关闭。此包仍为旧 versionCode/版本名的本地候选，不覆盖公开版，不证明配对、控制面板、双端或发布验收通过。
+
+2026-11-16 当前源码 Release 优化构建：离线运行现有个人 fork Release 配置并保留 R8/资源压缩，首次把构建目录直接指向 D 盘时，KSP 因源码与生成目录跨盘符失败；改为 E 盘临时目录联接到 D 盘实际目录后构建成功（4 分 52 秒）。临时联接已移除，D 盘产物保留。未签名 APK 位于 `D:/KDEBuild/controlpanel-e2e-current/release-candidate-20261116/build-v2/outputs/apk/release/kdeconnect-android-release-unsigned.apk`，SHA-256 `96FF53432C1383B14F02DC85BFD5D052CD09DA05B56B8F3F43D286278AA98DB4`，zipalign 4 字节检查通过。它仍带现有 `versionCode=13700` 和 alpha.3 版本名，不能作为新版本发布或直接安装；未使用发布密钥、未覆盖公开附件、未进行安装或双端验证。资源编译仍报告其他语言格式及缺默认值的历史警告，Lint 511 项错误级问题不因此通过。
+
+2026-11-16 本地天气日期测试补充：以模拟响应覆盖 UTC-12、UTC-5、UTC、UTC+8 和 UTC+14，检查正常连续日期被接受、重复第二天被拒；SDK 28/37 的 `PanelLocalWeatherCacheTest` 定向 6 项通过，XML 在 `D:/KDEBuild/controlpanel-e2e-current/reports/weather-offsets-0bac4df6551640a79b653548a18d03d4`。仅扩展测试；此前全量 337 项不包含本次扩充的偏移场景，也不代表真实天气服务或夏令时切换已经实测。
+
+2026-11-16 天气日期修复后重新执行 `lintDebug`：报告仍为 491 Error、20 Fatal、214 Warning、1 Hint；错误仍为 490 MissingTranslation、20 ExtraTranslation 和 1 MissingLeanbackLauncher。按 issue ID 与消息对照此前 `lint-post-compact`，未发现条目变化；新 XML/HTML/SARIF 等保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/lint-weather-date-75d4b754bd8947cb9048ba5cb1ecca05`。Gradle 因 `abortOnError=false` 返回成功不代表 Lint 通过，相关问题尚未解决。
+
+2026-11-16 手机本地天气日期修复：以前仅验证服务返回的第一天日期，重复的第二天可能被错误标为下一天；现在逐项验证服务日期，异常时保留有效当前天气但不显示该三日预报。SDK 28/37 的模拟响应测试先复现失败，记录在 `D:/KDEBuild/controlpanel-e2e-current/reports/weather-dates-first-23c41655fee242b09661d2ac10b3528f`；修复后定向测试通过，全量 `testDebugUnitTest assembleDebug` 为 50 套件、337 项、0 失败/错误/跳过，XML 保存于 `reports/android-weather-dates-full-3488ab6a03a84ce08289d5397e3af0f6`。新 Debug APK SHA-256 为 `7A39A1E65AA3A79FF416D3CEDB174A67F7D091B066B574911C791D8469ECE1D9`，尚未安装模拟器或实体手机。最近 Lint 报告早于此运行代码修改，未重新执行；真实天气、跨时区和双端验收仍未完成。
+
+2026-11-16 Lint 存量分类（读取此前 `reports/lint-post-compact/lint-results-debug.xml`，未重新执行 Lint）：511 条错误级问题中，490 条 MissingTranslation 按资源项计，其中 75 条定位到控制面板资源或名称、415 条为其他资源；另外有 20 条 ExtraTranslation 和 1 条 MissingLeanbackLauncher。控制面板英文默认及简体中文资源存在，但报告显示还缺多种项目支持的语言；这些数字是问题条数，不是待翻译语言或具体翻译数量。未将默认英文复制成其他语言、未关闭检查，也未修改其他插件；多语言质量校对和全项目 Lint 清理仍待完成。
+
+2026-11-16 新增进度界面与图标附件测试后的全量复跑：离线执行 `testDebugUnitTest assembleDebug`，以 D 盘临时 init 脚本设置本次测试 JVM 上限 2 GB；50 套件、335 项、0 失败、0 错误、0 跳过。原始 XML 保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-final-local-f33da8ebae4a49268a0f8b58fe04d550`。Debug APK 未重新生成；本次未重跑 Lint、实际双端和发行验收。
+
+2026-11-16 图标接收真实回环套接字超时测试：构造只连接但不发送附件的本机 TCP 服务，检查读取超时后连接关闭、触发重试且面板会话保持 READY；`PanelAssetTransfersTest` 定向 6 项通过，XML 在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-asset-socket-4f2c0089165c4602a9834fa7414b8ffb`。这是本机套接字与模拟会话，不是 TLS 真实双端联调；未重新全量运行。
+
+2026-11-16 图标附件成功路径补充：生成 256x256 PNG，通过实际 `PanelAssetTransfers` 异步读取、摘要校验及 `PanelAssetCache` 落盘和解码；定向 5 项通过。首次默认 Robolectric 图形模式测试未写入缓存，失败 XML 在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-asset-first-3efaa2b47f5c42baab3e209f0104691c`；改用已有缓存测试所用的 SDK 28 原生图形模式后通过，最终 XML 在 `reports/android-asset-final-432e530667794ddab7e4cfe449a350c8`。此轮只新增测试，尚未重新全量运行或验证真实网络附件传输。
+
+2026-11-16 进度会话到界面的本地联动补充：在 SDK 28/37 Robolectric Compose 中，通过实际 `PanelSession` 接收模拟线上格式进度，检查旧任务、配置修订后的 waiting、无百分比的新任务及断线提示。`PanelInfoProgressUiTest` 定向 8 项通过，XML 保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-progress-session-ui-f8fdcb8b5ae4440bb650d30240b9c285`。仅新增测试；以下 331 项全量结果早于此用例，不代表当前新增用例已纳入全量复跑，也不等同真实双端网络测试。
+
+2026-11-16 进度配置切换测试加入后的全量复跑：使用 D 盘临时 init 脚本将本次测试 JVM 堆上限设置为 2 GB，离线执行 `testDebugUnitTest assembleDebug` 成功；50 套件、331 项、0 失败、0 错误、0 跳过。完整 XML 另存于 `D:/KDEBuild/controlpanel-e2e-current/reports/android-progress-full-32a25563a12a4dbc8fee4d9b500ef88e`。仅新增测试，Debug APK 任务为 UP-TO-DATE，SHA-256 仍为 `5ACB3C2F8A5E94EE9CDC4254C1FEB216C4F4B39D1B8CA663C0676F852E104104`；本次未重跑 Lint 或双端联调。
+
+2026-11-16 进度配置切换定向测试：模拟当前修订、更新配置、接收新序号的 unavailable/waiting 和后续进度，检查拒绝旧修订及旧序号；`PanelSessionTest` 14 项通过。首轮夹具使用 Android 序列化输出的显式 null percent，与桌面实际省略该字段不同，导致 waiting 被拒；改成桌面线上格式后通过，没有修改 Android 运行代码。首次 Gradle 配置还因继承 `ANDROID_SDK_HOME` 失败，专用进程中移除该变量后完成测试。此轮只运行定向测试，之前 330 项全量报告不包含新用例；真实双端仍未验证。
+
+2026-11-16 当前 Debug 包模拟器启动复核：使用独立 ADB 5038 核对 `emulator-5580` 的 AVD 名称 `KDEPanelCurrentE2E4` 和模拟器属性后安装；APK 本地及安装后的 SHA-256 均为 `5ACB3C2F8A5E94EE9CDC4254C1FEB216C4F4B39D1B8CA663C0676F852E104104`。禁用该专用模拟器 Wi-Fi 后启动主界面，进程存活，界面显示设备列表和 No devices；截图与 UI 树在 `D:/KDEBuild/controlpanel-e2e-current/startup-c702b2403eab45d4b143929dfbd731b8/ui`。结束后关闭该模拟器及独立 ADB 服务；未操作实体手机。该检查未配对、未进入控制面板，也不能证明实际双端或完整视觉验收通过；该 AVD 的 Wi-Fi 已关闭，后续联调需在确认隔离后重新启用。
+
+2026-11-16 紧凑表盘大字体测试加入后全量复跑：继续使用 D 盘临时 init 脚本设置测试 JVM 2 GB 堆，`testDebugUnitTest` 和 `assembleDebug` 成功，50 套件、330 项、0 失败、0 跳过；APK 未因纯测试修改重新生成。完整 XML 保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-full-compact-font`。首次默认堆内存不足的历史失败记录仍保留，实际双端、模拟器新包和完整无障碍验收未完成。
+
+2026-11-16 紧凑表盘字体补充：在 SDK 28/37、640dp 宽、180dp 高、实际 2 倍字体和长阶段文本下，读取 Compose 文本布局，验证离线提示在省略号之前且进度行高度未裁切。相关 `PanelInfoProgressUiTest` 定向 6/6 通过，报告保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-compact-font`。此轮只增加测试，完整套件 328 项是新增用例之前的结果；真实模拟器画面及其他语言仍需验证。
+
+2026-11-16 紧凑表盘修改后重新运行 `lintDebug`，报告仍为 511 errors、214 warnings、1 hint（490 MissingTranslation、20 ExtraTranslation、1 MissingLeanbackLauncher）。新报告与修改前报告分别保存于 `D:/KDEBuild/controlpanel-e2e-current/reports/lint-post-compact` 和 `lint-pre-compact`。由于项目关闭了 `abortOnError`，任务成功不代表 Lint 通过；未修改其他插件或全语言翻译。
+
+2026-11-16 紧凑表盘修复后全量回归：首次运行 328 项中 `SystemVolumePluginTest` 有 3 项因 Java heap space 失败，报告保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-compact-full-first`。未修改音量代码；关闭专用模拟器后使用本机临时 init 脚本 `D:/KDEBuild/controlpanel-e2e-current/android-test-memory.gradle`，仅将本次测试 JVM 堆上限设为 2 GB，不更改仓库配置或 APK 逻辑。重跑 50 套件、328 项、0 失败、0 跳过，Debug 构建成功，报告保存在 `reports/android-compact-full-retry`。新 APK SHA-256 为 `5ACB3C2F8A5E94EE9CDC4254C1FEB216C4F4B39D1B8CA663C0676F852E104104`，尚未安装到模拟器；Lint 报告早于紧凑布局修改，仍需重新生成。不能将首次失败归因于系统物理内存或声称未发生失败。
+
+2026-11-16 紧凑信息表盘修复：低高度布局此前忽略 `showForecast=false`，并把离线进度统一标为过期、未收到进度时不显示等待。现按配置隐藏预报，区分等待、离线和过期，并优先显示状态。SDK 28/37 的普通及紧凑 Compose 定向测试共 4 项通过；首次紧凑断言因未启用子串匹配失败，报告保存在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-compact-first`，最终报告在 `android-compact-final`。修改后完整套件、Lint、APK 和模拟器尚未重新验证；此前 326 项及已安装 APK 不包含此修复。
+
+2026-11-16 信息表盘手机 UI 测试加入后的完整复测：`testDebugUnitTest` 与 `assembleDebug` 成功，50 套件、326 项、0 失败、0 跳过；XML 保存于 `D:/KDEBuild/controlpanel-e2e-current/reports/android-full-info-ui`。本轮仅新增测试，APK 任务为 UP-TO-DATE。先前 324 项是历史结果；实际双端、真实无障碍和整体验收仍未完成。
+
+2026-11-16 信息表盘手机 UI 补充：Robolectric Compose 在 SDK 28/37 验证两条备注、隐藏预报、进度百分比缺省、过期、离线和不可用状态，定向 2/2 通过。首轮两项失败及诊断重试是测试按不带项目符号的完整文本匹配造成节点未找到；改为包含实际符号的文本后检查可见性通过，未据此放宽可见性断言。报告分别在 `D:/KDEBuild/controlpanel-e2e-current/reports/android-info-ui-first`、`android-info-ui-second`、`android-info-ui-final`。仅本地 Compose 测试，不等于模拟器配对后的实际画面或双端链路通过；新测试加入后完整套件尚未重跑，之前 324 项结果仍保存在独立目录。
+
+2026-11-16 后续完整复测：天气响应异常保护和本地模拟响应测试加入后，`testDebugUnitTest` 与 `assembleDebug` 成功；49 套件、324 项、0 失败、0 跳过。完整 XML 已另存 `D:/KDEBuild/controlpanel-e2e-current/reports/android-full-20261116`，定向报告另存 `reports/weather-targeted`。本次源码重跑 Lint 仍为 511 errors、214 warnings、1 hint，错误组成不变；新旧报告分别保存于 `reports/lint-current` 和 `reports/lint-previous`。下面的 322 项是前一轮历史结果。
+
+随后仅向已核对的 `KDEPanelCurrentE2E4` 模拟器更新当前 Debug APK；本地和安装包 SHA-256 均为 `5B298826BC84A46F15CCC3E481AA74BF10C6E5295C18E81A40DB1B40C396902D`。重启后进程存活，深色空设备列表截图 `screen-c174f234bddc4482b2dcd6e9eb13c971.png`。未配对或执行控制面板，不能以此视为双端联调通过。
+
+2026-11-16 拉取后本地验证（基线 `b36947d79`，包含尚未提交的工作区修改）：
+
+- 修正新代码中的绘图扩展导入、布局参数、JSON 导入和主题方法签名冲突。首次两次构建因上述编译问题失败，修正后完整重跑。
+- 控制面板天气缓存按请求城市隔离，指定城市失败时不切换为当前位置；仅自动定位请求定位权限，并明确处理权限撤销。WorkBuddy 进度按连接会话重置序号比较，离线显示仍保留最后快照。
+- 最终 `testDebugUnitTest` 和 `assembleDebug` 通过：49 套件、322 项、0 失败、0 跳过。该结果包含上述权限处理修改；Debug 包未在实体手机安装。
+- `lintDebug` 最终报告为 511 errors、214 warnings、1 hint：490 MissingTranslation、20 ExtraTranslation（Fatal）、1 MissingLeanbackLauncher。定位权限问题已消除；任务返回成功是因为 `abortOnError = false`，不是 Lint 通过。报告在本机构建目录 `build/reports/lint-results-debug.html`。
+- 未做最新源码的实际双端联调、普通 LAN、多设备长时、真机、完整视觉/辅助技术、最终 Release 安装验证。已公开 alpha.3 和桌面 alpha.4 不含本轮新修改，不应作为当前源码的安装包。
+- 后续双端联调准备：旧天气脚本固定使用此前桌面包和证据目录，不能直接代表本轮源码。2026-11-16 核查独立 ADB 5038 时没有设备连接；检查后关闭了本次新启动的 5038 服务，未操作实体手机。应先为当前版本建立新的隔离证据目录、确认模拟器身份及实际加载的桌面插件，再运行联调，不能覆盖历史证据。
+- 后续新建独立 Android 34 模拟器 `KDEPanelCurrentE2E4`，使用独立 ADB 5038，核对模拟器属性和名称后安装当前 Debug APK 并启动；允许模拟器通知权限后，设备列表可见且为空。证据在 `D:/KDEBuild/controlpanel-e2e-current/ui`；这只是启动及空设备列表检查，尚未配对或完成双端联调。正常桌面 LAN 后端仍会进行 mDNS 公告和发现，不能仅靠关闭 UDP 广播声称网络隔离。
+- 同一模拟器的全局设置页手动切换 Dark 和 Light，截图分别确认深色和浅色；强制停止并重新启动调试应用后，设置页仍显示 Light。截图分别为 `screen-5fd3fdd76df34290baa7a388b3fdab45.png`、`screen-f122c9b6ece64c22941b46b17e9c1db1.png`、`screen-dc68a0dfbb8543848328d83a92c6ea93.png`，位于上述证据目录。这只覆盖全局设置页，不代表独立控制面板主题、所有 Compose 页面或实体手机验证完成。
+- 在上述模拟器的空设备配对列表页，Light 与 Dark 两种全局选择分别呈现浅色及深色界面，截图为 `screen-91da08ad97a24702ba7783bc4705c061.png` 和 `screen-d81469c32c73467594f4f0e7c62afdea.png`。仅检查无设备状态，没有发起配对；控制面板本身和其他 Compose 页面仍需单独验证。
+- 随后天气模块新增对服务响应 JSON 类型异常的保护，避免异常终止本地天气刷新；`assembleDebug` 再次成功，但这次修改后尚未重跑 322 项测试或 Lint，也没有重新安装模拟器。异常响应和同城缓存回退仍需专门测试；上面的模拟器与全量测试证据针对修改前版本。
+- 随后以注入的本地 JSON 响应覆盖错误地理编码、错误天气结构、同城缓存回退和跨城市隔离；定向执行 `PanelLocalWeatherCacheTest` 在 SDK 28/37 共 4 项通过，没有访问外部天气服务。定向运行覆盖了构建目录中的全量测试结果文件，不应把当前测试目录当成 322 项的完整报告；最终提交前仍需全量重跑并保存报告。
+- 桌面对应工作区在 `kdeconnect-kde`；其本轮 25/25 CTest 记录见该仓库 `docs/control-panel/BUILD_STATUS.zh-CN.md`。两端本轮改动尚未提交或推送，切换电脑前需先按仓库规则完成同步。
+
 2026-11-15 当前接续见[换机指南](DEVELOPER-HANDOFF.zh-CN.md)：签名 Release alpha.3、配套 Windows alpha.4 已公开，源码已同步个人 GitHub。本次仅整理文档，没有重跑构建/功能测试；下方“仅本地/未发行”是对应历史阶段状态。
 
 当前 Android 结果见[阶段二十三](MILESTONE-23-PANEL-CONTRAST.zh-CN.md)：主控制页九种背景及五种状态的文字检查通过；拥挤布局支持滚动，实测标签高度保留 48dp 图标。保留旧文字/裁切失败及新增图标断言后两项失败，最终 45 套件/304 项通过，Lint 重新生成仍为 493 错误。alpha.3 标签及附件不更新；桌面自选背景、实际辅助技术与原整体验收继续保留。下方旧“当前”均为历史节点。

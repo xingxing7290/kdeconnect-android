@@ -165,7 +165,7 @@ private fun PanelInfoNotes(notes: List<String>, message: String, ink: Color, qui
         return
     }
     val perNote = if (entries.size > 1) maxOf(1, lines / entries.size) else lines
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(gap / 3), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(gap / 3, Alignment.CenterVertically)) {
         entries.take(4).forEach { note ->
             PanelDialText(if (entries.size > 1) "· $note" else note, color = ink, fontSize = size, lineHeight = size * 1.2f,
                 maxLines = perNote, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
@@ -256,13 +256,20 @@ private fun PanelCompactInformationDial(options: PanelIdle, now: Calendar, weath
         val note = options.info.notes.firstOrNull { it.isNotBlank() } ?: options.message
         PanelDialText(note.ifBlank { stringResource(R.string.control_panel_info_notes_hint) },
             color = ink, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (options.info.showProgress && progress != null && progress.status != PanelWorkProgress.STATUS_UNAVAILABLE) {
-            val freshProgress = connection == PanelConnection.READY && progress.fresh(nowSeconds, options.info.staleMs)
+        if (options.info.showProgress) {
+            val usable = progress != null && progress.status != PanelWorkProgress.STATUS_UNAVAILABLE
+            val freshProgress = usable && connection == PanelConnection.READY && checkNotNull(progress).fresh(nowSeconds, options.info.staleMs)
+            val label = when {
+                connection != PanelConnection.READY -> stringResource(R.string.control_panel_progress_offline)
+                !usable -> stringResource(R.string.control_panel_progress_waiting)
+                !freshProgress -> stringResource(R.string.control_panel_progress_stale)
+                else -> ""
+            }
             PanelDialText(
                 stringResource(R.string.control_panel_progress_title) + " · " +
-                    (progress.stage.ifBlank { progressStatusLabel(progress.status) }) +
-                    (progress.percent?.let { " " + stringResource(R.string.control_panel_progress_percent, it) } ?: "") +
-                    (if (freshProgress) "" else " · " + stringResource(R.string.control_panel_progress_stale)),
+                    (if (label.isNotEmpty()) label + if (usable) " · " else "" else "") +
+                    (if (usable) checkNotNull(progress).stage.ifBlank { progressStatusLabel(progress.status) } else "") +
+                    (if (usable) progress?.percent?.let { " " + stringResource(R.string.control_panel_progress_percent, it) }.orEmpty() else ""),
                 Modifier.fillMaxWidth().testTag("panel-progress-compact"), color = if (freshProgress) ink else quiet,
                 fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -280,7 +287,7 @@ private fun PanelCompactInformationDial(options: PanelIdle, now: Calendar, weath
                 PanelDialText(today?.let { "${it.minimum.roundToInt()}° / ${it.maximum.roundToInt()}°" } ?: "--° / --°", color = quiet,
                     fontSize = 12.sp, maxLines = 1, modifier = Modifier.testTag("panel-info-today-range"))
             }
-            repeat(3) { index ->
+            if (options.info.showForecast) repeat(3) { index ->
                 val day = days.getOrNull(index)
                 Column(Modifier.weight(1f).fillMaxHeight().border(1.dp, ink).padding(3.dp).testTag("panel-forecast-$index"),
                     verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally) {

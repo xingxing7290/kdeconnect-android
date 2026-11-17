@@ -4,8 +4,10 @@
 package org.kde.kdeconnect.plugins.controlpanel
 
 import android.os.Looper
+import android.graphics.Bitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +23,8 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.kde.kdeconnect.NetworkPacket
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(AndroidJUnit4::class)
 class PanelAssetTransfersTest {
@@ -99,6 +103,38 @@ class PanelAssetTransfersTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(1))
         assertEquals(2, sent.size)
     }
+    @Test
+    @Config(sdk = [28])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun validPngPayloadIsVerifiedAndStored() {
+        val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(android.graphics.Color.BLUE)
+        val bytes = ByteArrayOutputStream().use { output ->
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+            output.toByteArray()
+        }
+        bitmap.recycle()
+        val assetId = PanelAssetCache.hash(bytes)
+        val first = config.pages.first()
+        val slots = first.slots.toMutableList().apply { this[0] = checkNotNull(this[0]).copy(icon = assetId) }
+        val updated = config.copy(revision = config.revision + 1, pages = listOf(first.copy(slots = slots)) + config.pages.drop(1))
+        assertTrue(session.receiveConfig(updated.encode()))
+        transfers.stop()
+        val cache = PanelAssetCache(temporary.newFolder())
+        transfers = PanelAssetTransfers(cache, session, problem, { _, _ -> }, { synchronized++ })
+        transfers.update(updated)
+        val packet = buildJsonObject {
+            put("assetId", assetId); put("sessionId", session.sessionId); put("revision", updated.revision)
+            put("mime", "image/png"); put("size", bytes.size)
+        }
+        assertTrue(transfers.receive(packet, NetworkPacket.Payload(ByteArrayInputStream(bytes), bytes.size.toLong())))
+        val deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos()
+        while (!cache.contains(assetId) && System.nanoTime() < deadline) Thread.sleep(10)
+        assertTrue("Valid PNG must be written to the content-addressed cache", cache.contains(assetId))
+        assertNotNull(cache.bitmap(assetId))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(problem.value)
+    }
     @Test fun readTimeoutOnlyChangesTheSelectedPayloadSocket() {
         java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress()).use { server ->
             java.net.Socket(server.inetAddress, server.localPort).use { client ->
@@ -115,6 +151,24 @@ class PanelAssetTransfersTest {
                             assertEquals(3000, client.soTimeout)
                         }
                     }
+                }
+            }
+        }
+    }
+    @Test fun stalledSocketIsClosedAndRetriedWithoutDisablingSession() {
+        java.net.ServerSocket(0, 1, java.net.InetAddress.getLoopbackAddress()).use { server ->
+            java.net.Socket(server.inetAddress, server.localPort).use { client ->
+                server.accept().use {
+                    assertTrue(transfers.receive(body(), NetworkPacket.Payload(client, 1)))
+                    val deadline = System.nanoTime() + Duration.ofSeconds(8).toNanos()
+                    while (!client.isClosed && System.nanoTime() < deadline) Thread.sleep(20)
+                    assertTrue("Stalled attachment socket must close after the read timeout", client.isClosed)
+                    while (sent.size < 2 && System.nanoTime() < deadline) {
+                        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+                        Thread.sleep(20)
+                    }
+                    assertEquals(2, sent.size)
+                    assertEquals(PanelConnection.READY, session.state.value.connection)
                 }
             }
         }

@@ -16,6 +16,12 @@ DPAPI 加密保存，仅该账户可解密。应另行在可信离线位置备�
 只有加密密码文件而没有原 Windows 账户凭据不能保证在另一台机器恢复。
 未来更新必须复用该密钥并提高 versionCode；丢失密钥将无法覆盖升级。
 
+个人构建可通过 `-PcontrolPanelVersionCode=13701 -PcontrolPanelVersionLabel=local-test`
+显式设置候选版本；不传参数仍保留上面的 alpha.3 默认值。versionCode 必须大于
+项目基础值，并且正式发行前还必须自行核对大于所有已公开版本；该参数作用于本次
+Gradle 调用的默认配置，建议仅执行 Release 任务。`13701/local-test` 只是本地测试
+示例，不代表已选定或发布的新版本。
+
 Release 指优化构建类型，不代表全部功能已经通过正式验收。现有 Lint 错误、
 真机/多端联网及完整功能验收的限制仍见 docs/control-panel/BUILD_STATUS.zh-CN.md。
 安装手机需要用户自行确认来源并允许该来源安装应用；本次不自动安装实体手机。

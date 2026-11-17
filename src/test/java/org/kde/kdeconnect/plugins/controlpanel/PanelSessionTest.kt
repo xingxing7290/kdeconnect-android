@@ -4,6 +4,8 @@
 package org.kde.kdeconnect.plugins.controlpanel
 
 import java.io.File
+import kotlinx.serialization.json.JsonObject
+import org.kde.kdeconnect.helpers.JsonHelper
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -119,6 +121,41 @@ class PanelSessionTest {
         session.connected()
         assertTrue(session.receiveConfig(fixture().encode()))
         assertEquals("home", session.state.value.activePageId)
+    }
+
+    @Test
+    fun reconnectAcceptsRestartedProgressSequenceButRejectsOutOfOrderWithinSession() {
+        val session = readySession()
+        val now = 1_763_200_010L
+        fun progress(sequence: Long, fetched: Long) = PanelWorkProgress(
+            "workbuddy", "running", "task", "stage", "", 10, sequence, now - 5, fetched
+        ).encode()
+        assertTrue(session.receiveProgress(7, progress(100, now - 3), now))
+        session.disconnected()
+        assertEquals(100L, session.state.value.progress?.sequence)
+        session.connected()
+        assertTrue(session.receiveConfig(fixture().encode()))
+        assertTrue(session.receiveProgress(7, progress(1, now - 2), now))
+        assertFalse(session.receiveProgress(7, progress(0, now - 1), now))
+        assertEquals(1L, session.state.value.progress?.sequence)
+    }
+
+    @Test
+    fun newerWaitingProgressReplacesOldSnapshotAfterConfigurationChange() {
+        val session = readySession()
+        val now = 1_763_200_010L
+        val old = PanelWorkProgress("workbuddy", "running", "old task", "stage", "", 10, 100, now - 5, now - 3)
+        val waiting = PanelWorkProgress("workbuddy", "unavailable", "", "", "waiting", null, 101, now - 2, now - 2)
+        val fresh = PanelWorkProgress("workbuddy", "running", "new task", "stage", "", 20, 102, now - 1, now - 1)
+        assertTrue(session.receiveProgress(7, old.encode(), now))
+        assertTrue(session.receiveConfig(fixture().copy(revision = 8).encode()))
+        assertFalse(session.receiveProgress(7, old.encode(), now))
+        val waitingWire = JsonObject((JsonHelper.json.parseToJsonElement(waiting.encode()) as JsonObject).filterKeys { it != "percent" }).toString()
+        assertTrue(session.receiveProgress(8, waitingWire, now))
+        assertEquals("unavailable", session.state.value.progress?.status)
+        assertFalse(session.receiveProgress(8, old.encode(), now))
+        assertTrue(session.receiveProgress(8, fresh.encode(), now))
+        assertEquals("new task", session.state.value.progress?.title)
     }
 
     @Test

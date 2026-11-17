@@ -43,6 +43,7 @@ class PanelSession(
     private data class Pending(val request: PanelActionRequest, val sentAt: Long)
     private val pending = LinkedHashMap<String, Pending>()
     private var hasSessionConfig = false
+    private var hasSessionProgress = false
     private var nextSequence = 1L
     @Volatile var sessionId: String = ""
         private set
@@ -95,8 +96,9 @@ class PanelSession(
         if (current.connection != PanelConnection.READY || revision != config.revision) return false
         val snapshot = PanelWorkProgress.parse(raw) ?: return false
         if (snapshot.updatedAt > now + 60 || snapshot.fetchedAt > now + 60) return false
-        val previous = current.progress
+        val previous = current.progress.takeIf { hasSessionProgress }
         if (previous != null && (snapshot.sequence < previous.sequence || snapshot.fetchedAt < previous.fetchedAt)) return false
+        hasSessionProgress = true
         mutableState.value = current.copy(progress = snapshot)
         return true
     }
@@ -105,6 +107,7 @@ class PanelSession(
     fun connected() {
         pending.clear()
         hasSessionConfig = false
+        hasSessionProgress = false
         sessionId = UUID.randomUUID().toString()
         nextSequence = 1L
         mutableState.value = mutableState.value.copy(

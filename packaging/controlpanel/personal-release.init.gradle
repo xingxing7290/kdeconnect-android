@@ -3,9 +3,26 @@
 // Sign the resulting APK with the personal fork key, never the public debug key.
 allprojects {
     plugins.withId('com.android.application') {
+        def requestedCode = project.findProperty('controlPanelVersionCode')
+        def requestedLabel = project.findProperty('controlPanelVersionLabel')
+        if (requestedCode != null) {
+            def text = requestedCode.toString()
+            if (!(text ==~ /[0-9]{1,9}/)) {
+                throw new GradleException('Invalid controlPanelVersionCode')
+            }
+            androidComponents.finalizeDsl { extension ->
+                if (text.toInteger() <= extension.defaultConfig.versionCode) {
+                    throw new GradleException('controlPanelVersionCode must be greater than the base versionCode')
+                }
+                extension.defaultConfig.versionCode = text.toInteger()
+            }
+        }
+        if (requestedLabel != null && !(requestedLabel.toString() ==~ /[A-Za-z0-9][A-Za-z0-9._-]{0,47}/)) {
+            throw new GradleException('Invalid controlPanelVersionLabel')
+        }
         android.buildTypes.release {
             applicationIdSuffix = '.controlpanel'
-            versionNameSuffix = '-controlpanel-0.1.0-alpha.3'
+            versionNameSuffix = '-controlpanel-' + (requestedLabel == null ? '0.1.0-alpha.3' : requestedLabel.toString())
         }
     }
 }

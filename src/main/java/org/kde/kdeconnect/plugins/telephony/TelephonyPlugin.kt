@@ -165,6 +165,7 @@ class TelephonyPlugin : Plugin() {
 
     override fun onDestroy() {
         context.unregisterReceiver(receiver)
+        unmuteRinger()
     }
 
     override fun onPacketReceived(np: NetworkPacket): Boolean {
@@ -188,7 +189,7 @@ class TelephonyPlugin : Plugin() {
 
     override val optionalPermissions: Array<String> = arrayOf(Manifest.permission.READ_CONTACTS)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
 
     override val settingsScope = SettingsScope.APP_WIDE
 

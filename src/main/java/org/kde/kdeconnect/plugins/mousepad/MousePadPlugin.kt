@@ -61,7 +61,9 @@ class MousePadPlugin : Plugin() {
     override val description: String
         get() = context.getString(R.string.pref_plugin_mousepad_desc_nontv)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
+
+    override val keepAliveWhenUnreachable: Boolean = true
 
     override val settingsScope = SettingsScope.APP_WIDE
 
@@ -74,6 +76,7 @@ class MousePadPlugin : Plugin() {
     }
 
     fun sendMouseDelta(dx: Float, dy: Float) {
+        if (!device.isReachable) return // Called continuously while moving, don't spam failures
         val np = NetworkPacket(PACKET_TYPE_MOUSEPAD_REQUEST)
         np["dx"] = dx.toDouble()
         np["dy"] = dy.toDouble()
@@ -121,6 +124,7 @@ class MousePadPlugin : Plugin() {
     }
 
     fun sendScroll(dx: Double, dy: Double) {
+        if (!device.isReachable) return // Called continuously while scrolling, don't spam failures
         val np = NetworkPacket(PACKET_TYPE_MOUSEPAD_REQUEST)
         np["scroll"] = true
         np["dx"] = dx

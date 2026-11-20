@@ -15,11 +15,11 @@ import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
-import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 
 object TelephonyHelper {
 
-    const val LOGGING_TAG: String = "TelephonyHelper"
+    private const val TAG: String = "TelephonyHelper"
 
     /**
      * Try to get the phone number currently active on the phone
@@ -31,16 +31,15 @@ object TelephonyHelper {
     @Throws(SecurityException::class)
     fun getAllPhoneNumbers(context: Context): List<LocalPhoneNumber> {
         // Each subscription is a different SIM card
-        val subscriptionManager = ContextCompat.getSystemService(context, SubscriptionManager::class.java)
+        val subscriptionManager = context.getSystemService<SubscriptionManager>()
         if (subscriptionManager == null) {
-            // I don't know why or when this happens...
-            Log.w(LOGGING_TAG, "Could not get SubscriptionManager")
+            Log.w(TAG, "Could not get SubscriptionManager")
             return emptyList()
         }
         val subscriptionInfos = subscriptionManager.activeSubscriptionInfoList
         if (subscriptionInfos == null) {
             // This happens when there is no SIM card inserted
-            Log.w(LOGGING_TAG, "Could not get SubscriptionInfos")
+            Log.w(TAG, "Could not get SubscriptionInfos")
             return emptyList()
         }
         return subscriptionInfos.mapNotNull { info ->
@@ -57,7 +56,7 @@ object TelephonyHelper {
      * Get the ISO country code of the network the phone is currently registered to
      */
     fun getNetworkCountryIso(context: Context): String {
-        return (context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager).networkCountryIso
+        return context.getSystemService<TelephonyManager>()!!.networkCountryIso
     }
 
     /**
@@ -121,7 +120,7 @@ object TelephonyHelper {
                 }
             }
         } catch (e: Exception) {
-            Log.e(LOGGING_TAG, "Error encountered while trying to read APNs", e)
+            Log.e(TAG, "Error encountered while trying to read APNs", e)
         }
 
         return null

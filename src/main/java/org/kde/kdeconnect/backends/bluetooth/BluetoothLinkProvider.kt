@@ -8,6 +8,7 @@ package org.kde.kdeconnect.backends.bluetooth
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
@@ -29,13 +30,16 @@ import org.kde.kdeconnect.extensions.closeSafe
 import org.kde.kdeconnect.extensions.getParcelableArrayExtraCompat
 import org.kde.kdeconnect.extensions.getParcelableExtraCompat
 import org.kde.kdeconnect.helpers.DeviceHelper
-import org.kde.kdeconnect.helpers.ThreadHelper.execute
+import org.kde.kdeconnect.helpers.ThreadHelper
+import org.kde.kdeconnect.helpers.TrustedDevices
 import org.kde.kdeconnect.helpers.security.SslHelper
 import org.kde.kdeconnect.ui.SettingsFragment
+import java.io.Closeable
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.Reader
 import java.security.cert.CertificateException
+import java.security.cert.X509Certificate
 import java.util.UUID
 import kotlin.text.Charsets.UTF_8
 
@@ -71,7 +75,12 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
         }
     }
 
+    @Synchronized
     override fun onStart() {
+        if (clientRunnable != null || serverRunnable != null) {
+            return // Already started
+        }
+
         val preferences = PreferenceManager.getDefaultSharedPreferences(context)
         if (!preferences.getBoolean(SettingsFragment.KEY_BLUETOOTH_ENABLED, false)) {
             return
@@ -81,28 +90,32 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
         }
         Log.i("BluetoothLinkProvider", "onStart called")
 
-        //This handles the case when I'm the existing device in the network and receive a hello package
+        // This handles the case when I'm the existing device in the network and receive a hello package
         clientRunnable = ClientRunnable()
-        execute(clientRunnable!!)
+        ThreadHelper.runOnNewThread(clientRunnable!!)
 
         // I'm on a new network, let's be polite and introduce myself
         serverRunnable = ServerRunnable()
-        execute(serverRunnable!!)
+        ThreadHelper.runOnNewThread(serverRunnable!!)
     }
 
+    @Synchronized
     override fun onNetworkChange(network: Network?) {
         Log.i("BluetoothLinkProvider", "onNetworkChange called")
         onStop()
         onStart()
     }
 
+    @Synchronized
     override fun onStop() {
-        if (bluetoothAdapter == null || clientRunnable == null || serverRunnable == null) {
+        if (clientRunnable == null && serverRunnable == null) {
             return
         }
         Log.i("BluetoothLinkProvider", "onStop called")
-        clientRunnable!!.stopProcessing()
-        serverRunnable!!.stopProcessing()
+        clientRunnable?.stopProcessing()
+        serverRunnable?.stopProcessing()
+        clientRunnable = null
+        serverRunnable = null
     }
 
     override val name: String = "BluetoothLinkProvider"
@@ -114,6 +127,26 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
         synchronized(sockets) { sockets.remove(remoteAddress) }
         synchronized(visibleDevices) { visibleDevices.remove(link.deviceId) }
         onConnectionLost(link)
+    }
+
+    private fun isCertificateValid(deviceInfo: DeviceInfo): Boolean {
+        val certDeviceId = SslHelper.getCommonNameFromCertificate(deviceInfo.certificate as X509Certificate)
+        if (certDeviceId != deviceInfo.id) {
+            Log.w("BluetoothLinkProvider", "DeviceID in cert doesn't match deviceID in identity packet: ${deviceInfo.id} vs $certDeviceId")
+            return false
+        }
+        if (TrustedDevices.isTrustedDevice(context, deviceInfo.id)
+            && deviceInfo.certificate != TrustedDevices.getDeviceCertificate(context, deviceInfo.id)) {
+            Log.w("BluetoothLinkProvider", "Certificate doesn't match the one stored for trusted device ${deviceInfo.id}")
+            return false
+        }
+        return true
+    }
+
+    private fun rejectConnection(device: BluetoothDevice?, socket: BluetoothSocket, connection: Closeable) {
+        connection.closeSafe()
+        // Only remove the entry if it's still ours, so we don't drop the socket of an existing link
+        synchronized(sockets) { sockets.remove(device, socket) }
     }
 
     private inner class ServerRunnable : Runnable {
@@ -166,61 +199,64 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
             try {
                 Thread.sleep(500)
             } catch (e: Exception) {
-                synchronized(sockets) { sockets.remove(socket.remoteDevice) }
+                rejectConnection(socket.remoteDevice, socket, socket)
                 throw e
             }
+            var connection: ConnectionMultiplexer? = null
             try {
-                ConnectionMultiplexer(socket).use { connection ->
-                    val outputStream = connection.defaultOutputStream
-                    val inputStream = connection.defaultInputStream
+                connection = ConnectionMultiplexer(socket)
+                val outputStream = connection.defaultOutputStream
+                val inputStream = connection.defaultInputStream
 
-                    val myDeviceInfo = DeviceHelper.getDeviceInfo(context)
-                    val np = myDeviceInfo.toIdentityPacket()
-                    val myCertificate = Base64.encodeToString(SslHelper.certificate.encoded, 0)
-                    val pemEncodedCertificate = "-----BEGIN CERTIFICATE-----\n$myCertificate\n-----END CERTIFICATE-----\n"
+                val myDeviceInfo = DeviceHelper.getDeviceInfo(context)
+                val np = myDeviceInfo.toIdentityPacket()
+                val myCertificate = Base64.encodeToString(SslHelper.certificate.encoded, 0)
+                val pemEncodedCertificate = "-----BEGIN CERTIFICATE-----\n$myCertificate\n-----END CERTIFICATE-----\n"
 
-                    np["certificate"] = pemEncodedCertificate
+                np["certificate"] = pemEncodedCertificate
 
-                    val message = np.serialize().toByteArray(UTF_8)
-                    outputStream.write(message)
-                    outputStream.flush()
-                    Log.i("BTLinkProvider/Server", "Sent identity packet")
+                val message = np.serialize().toByteArray(UTF_8)
+                outputStream.write(message)
+                outputStream.flush()
+                Log.i("BTLinkProvider/Server", "Sent identity packet")
 
-                    // Listen for the response
-                    val sb = StringBuilder()
-                    val reader: Reader = InputStreamReader(inputStream, UTF_8)
-                    var charsRead = 0
-                    val buf = CharArray(512)
-                    while (sb.lastIndexOf("\n") == -1 && reader.read(buf).also { charsRead = it } != -1) {
-                        sb.append(buf, 0, charsRead)
-                    }
-                    val response = sb.toString().substringBefore('\n') // the last chunk may contain the start of the next packet
-                    val identityPacket = NetworkPacket.unserialize(response)
-                    if (!DeviceInfo.isValidIdentityPacket(identityPacket)) {
-                        Log.w("BTLinkProvider/Server", "Invalid identity packet received.")
-                        return
-                    }
-                    Log.i("BTLinkProvider/Server", "Received identity packet")
-                    val pemEncodedCertificateString = identityPacket.getString("certificate")
-                    val base64CertificateString = pemEncodedCertificateString
-                            .replace("-----BEGIN CERTIFICATE-----\n", "")
-                            .replace("-----END CERTIFICATE-----\n", "")
-                    val pemEncodedCertificateBytes = Base64.decode(base64CertificateString, 0)
-                    val certificate = SslHelper.parseCertificate(pemEncodedCertificateBytes)
-                    val deviceInfo = DeviceInfo.fromIdentityPacketAndCert(identityPacket, certificate)
-                    Log.i("BTLinkProvider/Server", "About to create link")
-                    val link = BluetoothLink(context, connection,
-                            inputStream, outputStream, socket.remoteDevice,
-                            deviceInfo, this@BluetoothLinkProvider)
-                    Log.i("BTLinkProvider/Server", "About to addLink")
-                    addLink(identityPacket, link)
-                    Log.i("BTLinkProvider/Server", "Link Added")
+                // Listen for the response
+                val sb = StringBuilder()
+                val reader: Reader = InputStreamReader(inputStream, UTF_8)
+                var charsRead = 0
+                val buf = CharArray(512)
+                while (sb.lastIndexOf("\n") == -1 && reader.read(buf).also { charsRead = it } != -1) {
+                    sb.append(buf, 0, charsRead)
                 }
+                val response = sb.toString().substringBefore('\n') // the last chunk may contain the start of the next packet
+                val identityPacket = NetworkPacket.unserialize(response)
+                if (!DeviceInfo.isValidIdentityPacket(identityPacket)) {
+                    Log.w("BTLinkProvider/Server", "Invalid identity packet received.")
+                    rejectConnection(socket.remoteDevice, socket, connection)
+                    return
+                }
+                Log.i("BTLinkProvider/Server", "Received identity packet")
+                val pemEncodedCertificateString = identityPacket.getString("certificate")
+                val base64CertificateString = pemEncodedCertificateString
+                        .replace("-----BEGIN CERTIFICATE-----\n", "")
+                        .replace("-----END CERTIFICATE-----\n", "")
+                val pemEncodedCertificateBytes = Base64.decode(base64CertificateString, 0)
+                val certificate = SslHelper.parseCertificate(pemEncodedCertificateBytes)
+                val deviceInfo = DeviceInfo.fromIdentityPacketAndCert(identityPacket, certificate)
+                if (!isCertificateValid(deviceInfo)) {
+                    rejectConnection(socket.remoteDevice, socket, connection)
+                    return
+                }
+                Log.i("BTLinkProvider/Server", "About to create link")
+                val link = BluetoothLink(context, connection,
+                        inputStream, outputStream, socket.remoteDevice,
+                        deviceInfo, this@BluetoothLinkProvider)
+                Log.i("BTLinkProvider/Server", "About to addLink")
+                addLink(identityPacket, link)
+                Log.i("BTLinkProvider/Server", "Link Added")
             } catch (e: Exception) {
-                synchronized(sockets) {
-                    sockets.remove(socket.remoteDevice)
-                    Log.i("BTLinkProvider/Server", "Exception thrown, removing socket", e)
-                }
+                Log.i("BTLinkProvider/Server", "Exception thrown, removing socket", e)
+                rejectConnection(socket.remoteDevice, socket, connection ?: socket)
                 throw e
             }
         }
@@ -281,6 +317,10 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                 if (sockets.containsKey(device)) {
                     continue
                 }
+                if (!canRunKdeConnect(device)) {
+                    Log.i("ClientRunnable", "Skipping device that can't run KDE Connect: $device")
+                    continue
+                }
                 Log.i("ClientRunnable", "Calling fetchUuidsWithSdp for device: $device")
                 device.fetchUuidsWithSdp()
                 val deviceUuids = device.uuids
@@ -289,6 +329,28 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                         Log.i("ClientRunnable", "device $device uuid: $thisUuid")
                     }
                 }
+            }
+        }
+
+        /**
+         * SDP has to page the remote device, so every bonded device that is out of range
+         * keeps the radio busy until the page timeout (~5 s). Skip devices that can't run
+         * KDE Connect: LE-only devices (no RFCOMM) and car kits, headsets, speakers, mice,
+         * watches, etc.
+         */
+        @SuppressLint("MissingPermission")
+        private fun canRunKdeConnect(device: BluetoothDevice): Boolean {
+            if (device.type == BluetoothDevice.DEVICE_TYPE_LE) {
+                return false
+            }
+            return when (device.bluetoothClass?.majorDeviceClass) {
+                BluetoothClass.Device.Major.AUDIO_VIDEO,
+                BluetoothClass.Device.Major.PERIPHERAL,
+                BluetoothClass.Device.Major.IMAGING,
+                BluetoothClass.Device.Major.WEARABLE,
+                BluetoothClass.Device.Major.TOY,
+                BluetoothClass.Device.Major.HEALTH -> false
+                else -> true
             }
         }
 
@@ -333,7 +395,11 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
         }
 
         private fun connectToDevice() {
-            val socket: BluetoothSocket
+            if (synchronized(sockets) { sockets.containsKey(device) }) {
+                Log.i("BTLinkProvider/Client", "Already connected to ${device?.address}")
+                return
+            }
+            var socket: BluetoothSocket? = null
             try {
                 Log.i("BTLinkProvider/Client", "Cancelling Discovery")
                 bluetoothAdapter!!.cancelDiscovery()
@@ -341,19 +407,30 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                 socket = device!!.createRfcommSocketToServiceRecord(SERVICE_UUID)
                 Log.i("BTLinkProvider/Client", "Connecting to ServiceRecord Socket")
                 socket.connect()
-                synchronized(sockets) { sockets.put(device, socket) }
             } catch (e: IOException) {
                 Log.e("BTLinkProvider/Client", "Could not connect to KDE Connect service on ${device?.address}", e)
+                socket?.closeSafe()
                 return
             } catch (e: SecurityException) {
                 Log.e("BTLinkProvider/Client", "Security Exception connecting to ${device?.address}", e)
+                socket?.closeSafe()
                 return
             }
+            synchronized(sockets) {
+                // The server thread might have accepted a connection from this device while we were connecting
+                if (sockets.containsKey(device)) {
+                    Log.i("BTLinkProvider/Client", "Already connected to ${device.address}, dropping new connection")
+                    socket.closeSafe()
+                    return
+                }
+                sockets.put(device, socket)
+            }
             Log.i("BTLinkProvider/Client", "Connected to ${device.address}")
+            var connection: ConnectionMultiplexer? = null
             try {
                 //Delay to let bluetooth initialize stuff correctly
                 Thread.sleep(500)
-                val connection = ConnectionMultiplexer(socket)
+                connection = ConnectionMultiplexer(socket)
                 val outputStream = connection.defaultOutputStream
                 val inputStream = connection.defaultInputStream
                 Log.i("BTLinkProvider/Client","Device: ${device.address} Before inputStream.read()")
@@ -370,7 +447,7 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
 
                 if (!DeviceInfo.isValidIdentityPacket(identityPacket)) {
                     Log.w("BTLinkProvider/Client", "Invalid identity packet received.")
-                    connection.closeSafe()
+                    rejectConnection(device, socket, connection)
                     return
                 }
 
@@ -378,10 +455,11 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                 val myId = DeviceHelper.getDeviceId(context)
                 if (identityPacket.getString("deviceId") == myId) {
                     // Probably won't happen, but just to be safe
-                    connection.closeSafe()
+                    rejectConnection(device, socket, connection)
                     return
                 }
                 if (visibleDevices.containsKey(identityPacket.getString("deviceId"))) {
+                    rejectConnection(device, socket, connection)
                     return
                 }
                 Log.i("BTLinkProvider/Client", "identity packet received, creating link")
@@ -393,6 +471,10 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                 val pemEncodedCertificateBytes = Base64.decode(base64CertificateString, 0)
                 val certificate = SslHelper.parseCertificate(pemEncodedCertificateBytes)
                 val deviceInfo = DeviceInfo.fromIdentityPacketAndCert(identityPacket, certificate)
+                if (!isCertificateValid(deviceInfo)) {
+                    rejectConnection(device, socket, connection)
+                    return
+                }
                 val link = BluetoothLink(context, connection, inputStream, outputStream,
                         socket.remoteDevice, deviceInfo, this@BluetoothLinkProvider)
 
@@ -416,7 +498,7 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                 }, true)
             } catch (e: Exception) {
                 Log.e("BTLinkProvider/Client", "Connection lost/disconnected on ${device.address}", e)
-                synchronized(sockets) { sockets.remove(device, socket) }
+                rejectConnection(device, socket, connection ?: socket)
             }
         }
     }

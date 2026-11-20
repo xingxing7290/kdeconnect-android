@@ -9,6 +9,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
@@ -16,37 +17,43 @@ import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.helpers.NotificationHelper
 
-internal class UploadNotification {
-    private val device: Device
-    private val jobId: Long
-
-    constructor(device: Device, jobId: Long) {
-        this.device = device
-        this.jobId = jobId
-        notificationId = SystemClock.elapsedRealtime().toInt()
-        notificationManager = device.context.getSystemService<NotificationManager>()!!
-        builder = NotificationCompat.Builder(device.context, NotificationHelper.Channels.FILETRANSFER_UPLOAD)
+internal class UploadNotification(private val device: Device, private val jobId: Long) {
+    private val notificationManager: NotificationManager = device.context.getSystemService<NotificationManager>()!!
+    private val notificationId: Int = SystemClock.elapsedRealtime().toInt()
+    private var builder: NotificationCompat.Builder =
+        NotificationCompat.Builder(device.context, NotificationHelper.Channels.FILETRANSFER_UPLOAD)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setAutoCancel(true)
             .setOngoing(true)
             .setProgress(100, 0, true)
+
+    init {
         addCancelAction()
     }
 
-    private val notificationManager: NotificationManager
-    private var builder: NotificationCompat.Builder
-    private val notificationId: Int
+    fun show() {
+        notificationManager.notify(notificationId, builder.build())
+    }
+
+    fun cancel() {
+        notificationManager.cancel(notificationId)
+    }
 
     fun addCancelAction() {
-        val cancelIntent = Intent(device.context, ShareBroadcastReceiver::class.java)
-        cancelIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-        cancelIntent.action = SharePlugin.ACTION_CANCEL_SHARE
-        cancelIntent.putExtra(SharePlugin.CANCEL_SHARE_BACKGROUND_JOB_ID_EXTRA, jobId)
-        cancelIntent.putExtra(SharePlugin.CANCEL_SHARE_DEVICE_ID_EXTRA, device.deviceId)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val cancelIntent = Intent(device.context, ShareBroadcastReceiver::class.java).apply {
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            action = SharePlugin.ACTION_CANCEL_SHARE
+            putExtra(SharePlugin.CANCEL_SHARE_BACKGROUND_JOB_ID_EXTRA, jobId)
+        }
+
         // Use a unique request code: extras are ignored when matching PendingIntents, so with a fixed one
         // all the cancel buttons would share a single PendingIntent with the job id of the latest notification
-        val cancelPendingIntent = PendingIntent.getBroadcast(device.context, jobId.toInt(), cancelIntent, flags)
+        val cancelPendingIntent = PendingIntent.getBroadcast(
+            device.context,
+            jobId.toInt(),
+            cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         builder.addAction(org.kde.kdeconnect_tp.R.drawable.ic_reject_pairing_24dp, device.context.getString(org.kde.kdeconnect_tp.R.string.cancel), cancelPendingIntent)
     }
@@ -70,9 +77,13 @@ internal class UploadNotification {
             .setAutoCancel(true)
             .setOngoing(false)
 
-        val prefs = PreferenceManager.getDefaultSharedPreferences(device.context)
-        if (prefs.getBoolean("share_notification_preference", true)) {
-            builder.setDefaults(Notification.DEFAULT_ALL)
+        // Since Android O, sound and vibration are controlled by the notification channel
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // Remove the setting when we only support SDK 26+
+            val prefs = PreferenceManager.getDefaultSharedPreferences(device.context)
+            if (prefs.getBoolean("share_notification_preference", true)) {
+                builder.setDefaults(Notification.DEFAULT_ALL)
+            }
         }
     }
 
@@ -82,11 +93,4 @@ internal class UploadNotification {
             .setChannelId(NotificationHelper.Channels.FILETRANSFER_ERROR)
     }
 
-    fun cancel() {
-        notificationManager.cancel(notificationId)
-    }
-
-    fun show() {
-        notificationManager.notify(notificationId, builder.build())
-    }
 }

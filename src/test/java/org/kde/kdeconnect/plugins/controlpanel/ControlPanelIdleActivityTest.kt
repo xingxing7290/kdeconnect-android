@@ -50,7 +50,8 @@ class ControlPanelIdleActivityTest {
                 sent.add(arg(0)); arg<Device.SendPacketStatusCallback>(1).onSuccess()
             }
         }
-        plugin = ControlPanelPlugin().apply { setContext(application, device); preferences.edit().clear().commit(); onCreate() }
+        val testDevice = device
+        plugin = ControlPanelPlugin().apply { setContext(application, testDevice); preferences.edit().clear().commit(); onCreate() }
         val config = PanelConfig.parse(File("docs/control-panel/fixtures/config-v1.json").readText())
         assertTrue(plugin.onPacketReceived(NetworkPacket(ControlPanelPlugin.CONFIG).apply {
             this["protocolVersion"] = 1

@@ -89,8 +89,9 @@ class ControlPanelTouchUiTest {
                 sent.add(arg(0)); arg<Device.SendPacketStatusCallback>(1).onSuccess()
             }
         }
+        val testDevice = device
         val control = ControlPanelPlugin().apply {
-            setContext(application, device)
+            setContext(application, testDevice)
             preferences.edit().clear().commit()
             onCreate()
         }

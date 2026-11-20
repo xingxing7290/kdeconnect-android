@@ -5,7 +5,6 @@
  */
 package org.kde.kdeconnect.ui
 
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -22,6 +21,8 @@ import androidx.annotation.StringRes
 import androidx.annotation.UiThread
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.core.content.getSystemService
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,8 +66,6 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
         }
     }
 
-    override fun getActionBarTitle() = null
-
     val deviceId: String by lazy {
         arguments?.getString(ARG_DEVICE_ID)
             ?: throw RuntimeException("You must instantiate a new DeviceFragment using DeviceFragment.newInstance()")
@@ -86,7 +85,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
             val callback = object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
                     // Handle back button, so we go to the list of devices in case we came from there
-                    (mActivity as? MainActivity)?.onDeviceSelected(null)
+                    (activity as? MainActivity)?.onDeviceSelected(null)
                 }
             }
             requireActivity().onBackPressedDispatcher.addCallback(getViewLifecycleOwner(), callback)
@@ -100,18 +99,23 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
             val device = device ?: return
 
             //Plugins button list
-            val menuEntries: Collection<Plugin.PluginUiMenuEntry> =
+            val menuEntries: Collection<Plugin.PluginUiMenuEntry> = if (device.isReachable) {
                 device.loadedPlugins.values.flatMap { it.getUiMenuEntries() }
+            } else {
+                emptyList()
+            }
             for (p in menuEntries) {
                 menu.add(p.name).setOnMenuItemClickListener {
-                    p.onClick(mActivity!!)
+                    p.onClick(requireActivity())
                     true
                 }
             }
-            val intent = PluginSettingsActivity.createIntent(mActivity!!, deviceId)
-            menu.add(R.string.device_menu_plugins).setOnMenuItemClickListener {
-                startActivity(intent)
-                true
+            if (device.isPaired || device.isReachable) {
+                val intent = PluginSettingsActivity.createIntent(requireActivity(), deviceId)
+                menu.add(R.string.device_menu_plugins).setOnMenuItemClickListener {
+                    startActivity(intent)
+                    true
+                }
             }
             if (device.isReachable) {
                 val builder = MaterialAlertDialogBuilder(requireContext())
@@ -147,7 +151,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                         removePluginsChangedListener(pluginsChangedListener)
                         unpair()
                     }
-                    (mActivity as? MainActivity)?.onDeviceSelected(null)
+                    (activity as? MainActivity)?.onDeviceSelected(null)
                     true
                 }
             }
@@ -168,16 +172,16 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
         super.onViewCreated(view, savedInstanceState)
         binding.deviceView.setupBottomPadding()
         device?.apply {
-            mActivity?.supportActionBar?.title = name
+            setActionBarText(name)
             removePairingCallback(pairingCallback)
             addPairingCallback(pairingCallback)
             removePluginsChangedListener(pluginsChangedListener)
             addPluginsChangedListener(pluginsChangedListener)
         } ?: run { // device is null
             Log.e(TAG, "Trying to display a device fragment but the device is not present")
-            (mActivity as? MainActivity)?.onDeviceSelected(null)
+            (activity as? MainActivity)?.onDeviceSelected(null)
         }
-        mActivity?.addMenuProvider(menuProvider, viewLifecycleOwner)
+        activity?.addMenuProvider(menuProvider, viewLifecycleOwner)
         refreshUI()
     }
 
@@ -197,7 +201,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
     }
 
     private val pluginsChangedListener =
-        PluginsChangedListener { mActivity?.runOnUiThread { refreshUI() } }
+        PluginsChangedListener { activity?.runOnUiThread { refreshUI() } }
 
     override fun onDestroyView() {
         device?.apply {
@@ -223,6 +227,12 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
         //Once in-app, there is no point in keep displaying the notification if any
         device.hidePairingNotification()
 
+        if (device.isPaired && device.isReachable) {
+            displayBatteryInfoIfPossible()
+        } else {
+            setActionBarSubtitle(null)
+        }
+
         binding.deviceView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -247,7 +257,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                                     pluginsWithButtons = pluginsWithButtons,
                                     pluginsNeedPermissions = pluginsNeedPermissions,
                                     pluginsNeedOptionalPermissions = pluginsNeedOptionalPermissions,
-                                    onButtonClick = { button -> button.onClick(mActivity!!) },
+                                    onButtonClick = { button -> button.onClick(requireActivity()) },
                                     actionNeedPermissions = { plugin ->
                                         plugin.permissionExplanationDialog.show(
                                             childFragmentManager,
@@ -261,16 +271,22 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                                         )
                                     }
                                 )
-                                displayBatteryInfoIfPossible()
                             } else {
                                 DeviceErrorScreen(
+                                    message = stringResource(id = R.string.unreachable_description),
                                     isRefreshing = isRefreshing,
                                     onRefresh = { refreshDevicesAction() }
                                 )
                             }
                         }
 
-                        else -> {
+                        else -> if (!device.isReachable) {
+                            DeviceErrorScreen(
+                                message = stringResource(id = R.string.unreachable_unpaired_description),
+                                isRefreshing = isRefreshing,
+                                onRefresh = { refreshDevicesAction() }
+                            )
+                        } else {
                             DevicePairingScreen(
                                 pairStatus = device.pairStatus,
                                 verificationKey = device.verificationKey ?: "",
@@ -291,7 +307,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                                         removePairingCallback(pairingCallback)
                                         cancelPairing()
                                     }
-                                    (mActivity as? MainActivity)?.onDeviceSelected(null)
+                                    (activity as? MainActivity)?.onDeviceSelected(null)
                                 }
                             )
                         }
@@ -299,18 +315,17 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                 }
             }
         }
-        mActivity?.invalidateOptionsMenu()
+        activity?.invalidateOptionsMenu()
     }
 
     private val pairingCallback: PairingHandler.PairingCallback =
         object : PairingHandler.PairingCallback {
             override fun incomingPairRequest() {
-                mActivity?.runOnUiThread { refreshUI() }
+                activity?.runOnUiThread { refreshUI() }
             }
 
             override fun pairingSuccessful() {
-                val accessibilityManager =
-                    requireContext().getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+                val accessibilityManager = requireContext().getSystemService<AccessibilityManager>()
                 if (accessibilityManager?.isEnabled == true) {
                     @Suppress("DEPRECATION")
                     val event = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -321,18 +336,18 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                     event.text.add(getString(R.string.pair_succeeded))
                     accessibilityManager.sendAccessibilityEvent(event)
                 }
-                mActivity?.runOnUiThread { refreshUI() }
+                activity?.runOnUiThread { refreshUI() }
             }
 
             override fun pairingFailed(error: String) {
-                mActivity?.runOnUiThread {
+                activity?.runOnUiThread {
                     viewModel.setPairingErrorMessage(message =error)
                     refreshUI()
                 }
             }
 
             override fun unpaired(device: Device) {
-                mActivity?.runOnUiThread {
+                activity?.runOnUiThread {
                     viewModel.setPairingErrorMessage(message =null)
                     refreshUI()
                 }
@@ -355,7 +370,7 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
                 BatteryPlugin.isLowBattery(batteryInfo) -> R.string.battery_status_low_format
                 else -> R.string.battery_status_format
             }
-            mActivity?.getString(resId, batteryInfo.currentCharge)
+            activity?.getString(resId, batteryInfo.currentCharge)
         } else {
             null
         }
@@ -379,6 +394,6 @@ class DeviceFragment : BaseFragment<ActivityDeviceBinding>() {
             else -> null
         }
 
-        mActivity?.supportActionBar?.subtitle = fullSubtitle
+        setActionBarSubtitle(fullSubtitle)
     }
 }

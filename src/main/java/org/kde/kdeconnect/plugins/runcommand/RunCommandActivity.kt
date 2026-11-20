@@ -36,32 +36,26 @@ class RunCommandActivity : AppCompatActivity() {
     private lateinit var deviceId: String
     private lateinit var sharedPreferences: SharedPreferences
 
+    private lateinit var plugin: RunCommandPlugin
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("RunCommandActivity", "Launched")
-        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)!!
+        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID) ?: return finish()
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
-        val device = KdeConnect.getInstance().getDevice(deviceId)
-        val plugin = device?.getPlugin<RunCommandPlugin>()
-        if (plugin == null) {
-            finish()
-            return
-        }
-
+        plugin = KdeConnect.getInstance().getDevicePlugin<RunCommandPlugin>(deviceId) ?: return finish()
         replaceCommands(plugin)
-
 
         setContent {
             val clipboardManager = LocalClipboard.current
 
             RunCommandScreen(
                 plugin = plugin,
-                device = device,
+                device = plugin.device,
                 commandList = commandList,
                 onBackPressedDispatcher = onBackPressedDispatcher,
                 onCopyUrlToClipboard = {
-                    copyCommandToClipboard(device, it, clipboardManager)
+                    copyCommandToClipboard(plugin.device, it, clipboardManager)
                 },
                 onUpdate = {
                     updateList()
@@ -147,6 +141,7 @@ class RunCommandActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!::deviceId.isInitialized) return
         val plugin =
             KdeConnect.getInstance().getDevicePlugin<RunCommandPlugin>(deviceId)
         if (plugin == null) {

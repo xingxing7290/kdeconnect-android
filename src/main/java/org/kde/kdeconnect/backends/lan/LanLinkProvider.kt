@@ -17,10 +17,14 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.WorkerThread
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 import org.kde.kdeconnect.DeviceInfo
 import org.kde.kdeconnect.NetworkPacket
-import org.kde.kdeconnect.NetworkPacket.Companion.unserialize
 import org.kde.kdeconnect.backends.BaseLink
 import org.kde.kdeconnect.backends.BaseLinkProvider
 import org.kde.kdeconnect.extensions.closeSafe
@@ -83,7 +87,8 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
     @Volatile
     private var udpServer: DatagramSocket? = null
 
-    private var lastBroadcast: Long = 0
+    private val networkChangeScope = CoroutineScope(Dispatchers.IO)
+    private var networkChangeJob: Job? = null
     @Volatile
     private var isStopped = true
 
@@ -102,7 +107,7 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
     fun unserializeReceivedIdentityPacket(message: String): Pair<NetworkPacket, Boolean>? {
         val identityPacket: NetworkPacket?
         try {
-            identityPacket = unserialize(message)
+            identityPacket = NetworkPacket.unserialize(message)
         } catch (e: SerializationException) {
             Log.w("KDE/LanLinkProvider", "Invalid identity packet received: ${e.message}")
             return null
@@ -147,12 +152,11 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
             return
         }
 
-        val message: String?
-        try {
+        val message = try {
             // We don't use a BufferedInputStream on purpose, since BufferedReader reads ahead and would require
             // us to keep a single BufferedInputStream instance and pass it around to make sure we don't lose data.
             // This means we are readying byte by byte directly from the OS, which is slow, but only for the handshake.
-            message = readLineBounded(socket.getInputStream(), MAX_IDENTITY_PACKET_SIZE)
+            readLineBounded(socket.getInputStream(), MAX_IDENTITY_PACKET_SIZE)
             //Log.e("TcpListener", "Received TCP packet: $message");
         } catch (e: Exception) {
             Log.e("KDE/LanLinkProvider", "Exception while receiving TCP packet", e)
@@ -331,7 +335,7 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
         val sslSocket = SslHelper.convertToSslSocket(context, socket, deviceId, deviceTrusted, clientMode)
         sslSocket.addHandshakeCompletedListener { event: HandshakeCompletedEvent ->
             // Start a new thread because some Android versions don't allow calling sslSocket.getOutputStream() from the callback
-            ThreadHelper.execute {
+            ThreadHelper.runOnNewThread {
                 val mode = if (clientMode) "client" else "server"
                 try {
                     val secureIdentityPacket: NetworkPacket?
@@ -344,23 +348,23 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
                         writer.flush()
                         val line = readLineBounded(sslSocket.getInputStream(), MAX_IDENTITY_PACKET_SIZE)
                         // Do not trust the identity packet we received unencrypted
-                        secureIdentityPacket = unserialize(line)
+                        secureIdentityPacket = NetworkPacket.unserialize(line)
                         if (!DeviceInfo.isValidIdentityPacket(secureIdentityPacket)) {
                             Log.e("KDE/LanLinkProvider", "Identity packet isn't valid")
                             sslSocket.closeSafe()
-                            return@execute
+                            return@runOnNewThread
                         }
                         val newProtocolVersion = secureIdentityPacket.getInt("protocolVersion")
                         if (newProtocolVersion != protocolVersion) {
                             Log.e("KDE/LanLinkProvider", "Protocol version changed half-way through the handshake: $protocolVersion -> $newProtocolVersion")
                             sslSocket.closeSafe()
-                            return@execute
+                            return@runOnNewThread
                         }
                         val newDeviceId = secureIdentityPacket.getString("deviceId")
                         if (newDeviceId != deviceId) {
                             Log.e("KDE/LanLinkProvider", "Device ID changed half-way through the handshake: $deviceId -> $newDeviceId")
                             sslSocket.closeSafe()
-                            return@execute
+                            return@runOnNewThread
                         }
                     } else {
                         secureIdentityPacket = identityPacket
@@ -440,13 +444,13 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
             newUdpServer?.closeSafe()
             return
         }
-        ThreadHelper.execute {
+        ThreadHelper.runOnNewThread {
             Log.i("UdpListener", "Starting UDP listener")
             while (!isStopped) {
                 try {
                     val packet = DatagramPacket(ByteArray(MAX_UDP_PACKET_SIZE), MAX_UDP_PACKET_SIZE)
                     newUdpServer.receive(packet)
-                    ThreadHelper.execute {
+                    ThreadHelper.runOnNewThread {
                         try {
                             udpPacketReceived(packet)
                         } catch (e: Exception) {
@@ -459,7 +463,6 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
                     }
                 } catch (e: IOException) {
                     Log.e("LanLinkProvider", "UdpReceive exception", e)
-                    onNetworkChange(null) // Trigger a UDP broadcast to try to get them to connect to us instead
                 }
             }
             Log.w("UdpListener", "Stopping UDP listener")
@@ -479,12 +482,12 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
             Log.e("LanLinkProvider", "Error opening tcp server", e)
             return
         }
-        ThreadHelper.execute {
+        ThreadHelper.runOnNewThread {
             while (!isStopped) {
                 try {
                     val socket = newTcpServer.accept()
                     configureSocket(socket)
-                    ThreadHelper.execute {
+                    ThreadHelper.runOnNewThread {
                         try {
                             tcpPacketReceived(socket)
                         } catch (e: IOException) {
@@ -509,7 +512,7 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
             Log.w("LanLinkProvider", "Will not UDP broadcast, missing ACCESS_LOCAL_NETWORK permission")
             return
         }
-        ThreadHelper.execute {
+        ThreadHelper.runOnNewThread {
             val ipList = ArrayList<InetAddress>()
             if (TrustedNetworkHelper.isTrustedNetwork(context)) {
                 ipList.add(InetAddress.getByName("255.255.255.255")) // Default: broadcast.
@@ -597,14 +600,28 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
         broadcastUdpIdentityPacket(null)
     }
 
+    @Synchronized
     override fun onNetworkChange(network: Network?) {
-        if (isStopped) return
-        if (SystemClock.elapsedRealtime() < lastBroadcast + DELAY_BETWEEN_BROADCASTS) {
-            Log.i("LanLinkProvider", "onNetworkChange: relax cowboy")
-            return
+        // Stop announcing right away, or we could announce ourselves on an untrusted network
+        if (!TrustedNetworkHelper.isTrustedNetwork(context)) {
+            synchronized(mdnsDiscovery) {
+                mdnsDiscovery.stopAnnouncing() // noop if already stopped
+            }
         }
-        lastBroadcast = SystemClock.elapsedRealtime()
+        if (network != null) {
+            handleNetworkChange(network)
+        } else {
+            // Debounce refreshes without a target network
+            networkChangeJob?.cancel()
+            networkChangeJob = networkChangeScope.launch {
+                delay(timeMillis = NETWORK_CHANGE_DEBOUNCE_MS)
+                handleNetworkChange(null)
+            }
+        }
+    }
 
+    private fun handleNetworkChange(network: Network?) {
+        if (isStopped) return
         setupUdpListener()
         setupTcpListener()
 
@@ -659,7 +676,7 @@ class LanLinkProvider(private val context: Context) : BaseLinkProvider() {
         private const val MAX_RATE_LIMIT_ENTRIES: Int = 255
         private const val MAX_UNPAIRED_CONNECTIONS: Int = 42
         private const val TCP_CONNECT_TIMEOUT: Int = 5_000
-        private const val DELAY_BETWEEN_BROADCASTS: Long = 200
+        private const val NETWORK_CHANGE_DEBOUNCE_MS: Long = 200
 
         @Throws(IOException::class)
         fun openServerSocketOnFreePort(minPort: Int): ServerSocket {

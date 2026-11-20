@@ -14,9 +14,10 @@ import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.core.content.edit
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.JsonHelper.json
@@ -24,14 +25,17 @@ import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect_tp.R
-import androidx.core.content.edit
+
+@Serializable
+private class RemoteCommand(val name: String, val command: String)
 
 @LoadablePlugin
 class RunCommandPlugin : Plugin() {
 
-    val commandList = ArrayList<CommandInfo>()
+    @Volatile
+    var commandList: List<CommandInfo> = emptyList()
+        private set
     private val callbacks = ArrayList<CommandsChangedCallback>()
-    val commandItems = ArrayList<CommandEntry>()
     val output = SnapshotStateList<RunCommandOutput>()
 
     // Ids of the commands that are currently running on the remote device. Currently only
@@ -68,7 +72,9 @@ class RunCommandPlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_runcommand_desc)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
+
+    override val keepAliveWhenUnreachable: Boolean = true
 
     override val settingsScope = SettingsScope.APP_WIDE
 
@@ -89,23 +95,27 @@ class RunCommandPlugin : Plugin() {
         requestCommandList()
     }
 
+    override fun onDestroy() {
+        // We won't get commandFinished for the commands that were running, so stop tracking them
+        runningProcesses.clear()
+        commandRunning.value = false
+    }
+
     override fun onPacketReceived(np: NetworkPacket): Boolean {
         if (np.has("commandList")) {
-            commandList.clear()
             try {
-                commandItems.clear()
-                val obj = json.decodeFromString<Map<String, JsonObject>>(np.getString("commandList"))
-                for ((s, value) in obj) {
+                val commandMap = json.decodeFromString<Map<String, JsonObject>>(np.getString("commandList"))
+                val newCommandList = ArrayList<CommandInfo>()
+                for ((key, value) in commandMap) {
                     try {
-                        val info = json.decodeFromJsonElement<CommandInfo>(JsonObject(value + ("key" to JsonPrimitive(s))))
-                        commandList.add(info)
-                        commandItems.add(CommandEntry(info))
+                        val command = json.decodeFromJsonElement<RemoteCommand>(value)
+                        newCommandList.add(CommandInfo(key, command.name, command.command))
                     } catch (e: SerializationException) {
                         Log.e("RunCommand", "Error parsing JSON", e)
                     }
                 }
 
-                commandItems.sortBy { it.name }
+                commandList = newCommandList.sortedBy { it.name.lowercase() }
 
                 // Used only by RunCommandControlsProviderService to display controls correctly even when device is not available
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -119,6 +129,7 @@ class RunCommandPlugin : Plugin() {
 
             } catch (e: SerializationException) {
                 Log.e("RunCommand", "Error parsing JSON", e)
+                commandList = emptyList()
             }
 
             for (aCallback in callbacks) {

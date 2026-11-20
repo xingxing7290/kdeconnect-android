@@ -18,7 +18,11 @@ class SystemVolumePlugin : Plugin() {
         fun sinksChanged()
     }
 
-    @Volatile private var sinkMap: Map<String, Sink> = emptyMap()
+    @Volatile
+    private var sinkMap: Map<String, Sink> = emptyMap()
+    val sinks: Collection<Sink>
+        get() = sinkMap.values
+
     private val listeners: MutableList<SinkListener> = mutableListOf()
 
     override val displayName: String
@@ -27,22 +31,23 @@ class SystemVolumePlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_systemvolume_desc)
 
+    override val keepAliveWhenUnreachable: Boolean = true
+
     override fun onPacketReceived(np: NetworkPacket): Boolean {
         if ("sinkList" in np) {
-            val replacement = linkedMapOf<String, Sink>()
+            val newSinkMap = LinkedHashMap<String, Sink>()
             val sinkArray = np.getJsonArray("sinkList")
             for (sinkObj in sinkArray.orEmpty()) {
                 try {
                     val sink = Sink(sinkObj)
-                    replacement[sink.name] = sink
+                    newSinkMap[sink.name] = sink
                 } catch (e: SerializationException) {
                     Log.e("KDEConnect", "Skipping invalid sink", e)
                 }
             }
+            sinkMap = newSinkMap
 
-            sinkMap = replacement
-            val snapshot = synchronized(listeners) { listeners.toList() }
-            snapshot.forEach { it.sinksChanged() }
+            notifySinksChanged()
         } else {
             val name = np.getString("name")
             val sink = sinkMap[name]
@@ -61,6 +66,11 @@ class SystemVolumePlugin : Plugin() {
             }
         }
         return true
+    }
+
+    private fun notifySinksChanged() {
+        val snapshot = synchronized(listeners) { listeners.toList() }
+        snapshot.forEach { it.sinksChanged() }
     }
 
     internal fun sendVolume(name: String, volume: Int) {
@@ -89,11 +99,14 @@ class SystemVolumePlugin : Plugin() {
         device.sendPacket(np)
     }
 
+    internal fun requestSinkList() {
+        val np = NetworkPacket(PACKET_TYPE_SYSTEMVOLUME_REQUEST)
+        np["requestSinks"] = true
+        device.sendPacket(np)
+    }
+
     override val supportedPacketTypes: Array<String> = arrayOf(PACKET_TYPE_SYSTEMVOLUME)
     override val outgoingPacketTypes: Array<String> = arrayOf(PACKET_TYPE_SYSTEMVOLUME_REQUEST)
-
-    val sinks: Collection<Sink>
-        get() = sinkMap.values
 
     internal fun addSinkListener(listener: SinkListener) {
         synchronized(listeners) {

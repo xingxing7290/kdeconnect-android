@@ -52,6 +52,9 @@ class BackgroundService : Service() {
 
     private val linkProviders = mutableListOf<BaseLinkProvider>()
 
+    private var screenOnReceiver: KdeConnectBroadcastReceiver? = null
+    private var networkCallback: NetworkCallback? = null
+
     /** Indicates whether device is connected over wifi / usb / bluetooth / (anything other than cellular) */
     val isConnectedToNonCellularNetwork: LiveData<Boolean>
         field = MutableLiveData<Boolean>()
@@ -66,16 +69,16 @@ class BackgroundService : Service() {
 
     private fun registerLinkProviders() {
         linkProviders.add(LanLinkProvider(this))
-        //linkProviders.add(LoopbackLinkProvider(this))
+        //linkProviders.add(org.kde.kdeconnect.backends.loopback.LoopbackLinkProvider(this))
         linkProviders.add(BluetoothLinkProvider(this))
     }
 
-    fun onNetworkChange(network: Network?) {
+    private fun onNetworkChange(network: Network?) {
         if (!initialized) {
-            Log.d(LOG_TAG, "ignoring onNetworkChange called before the service is initialized")
+            Log.d(TAG, "ignoring onNetworkChange called before the service is initialized")
             return
         }
-        Log.d(LOG_TAG, "onNetworkChange")
+        Log.d(TAG, "onNetworkChange")
         for (linkProvider in linkProviders) {
             linkProvider.onNetworkChange(network)
         }
@@ -109,27 +112,39 @@ class BackgroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION)
         }
-        registerReceiver(KdeConnectBroadcastReceiver(), filter)
+        screenOnReceiver = KdeConnectBroadcastReceiver().also {
+            registerReceiver(it, filter)
+        }
 
         // Watch for changes on all network connections except cellular networks
         val networkRequestBuilder = createNonCellularNetworkRequestBuilder()
         val connectivityManager = this.getSystemService<ConnectivityManager>()
-        connectivityManager?.registerNetworkCallback(networkRequestBuilder.build(), object : NetworkCallback() {
+        networkCallback = object : NetworkCallback() {
 
             // All callbacks run on a dedicated thread that isn't the main thread
 
+            private val availableNetworks = mutableSetOf<Network>()
+
             override fun onAvailable(network: Network) {
                 Log.i("BackgroundService", "Valid network available")
-                isConnectedToNonCellularNetwork.postValue(true)
+                synchronized(availableNetworks) {
+                    availableNetworks.add(network)
+                    isConnectedToNonCellularNetwork.postValue(true)
+                }
                 onNetworkChange(network)
             }
 
             override fun onLost(network: Network) {
                 Log.i("BackgroundService", "Valid network lost")
-                isConnectedToNonCellularNetwork.postValue(false)
-                onNetworkChange(network)
+                synchronized(availableNetworks) {
+                    availableNetworks.remove(network)
+                    isConnectedToNonCellularNetwork.postValue(availableNetworks.isNotEmpty())
+                }
+                onNetworkChange(null)
             }
-        })
+        }.also {
+            connectivityManager?.registerNetworkCallback(networkRequestBuilder.build(), it)
+        }
 
         registerLinkProviders()
         addConnectionListener(applicationInstance.connectionListener) // Link Providers need to be already registered
@@ -235,13 +250,18 @@ class BackgroundService : Service() {
             linkProvider.onStop()
         }
         KdeConnect.getInstance().removeDeviceListChangedCallback("BackgroundService")
+        screenOnReceiver?.let { unregisterReceiver(it) }
+        screenOnReceiver = null
+        networkCallback?.let { getSystemService<ConnectivityManager>()?.unregisterNetworkCallback(it) }
+        networkCallback = null
+        instance = null
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(LOG_TAG, "onStartCommand")
+        Log.d(TAG, "onStartCommand")
         if (NotificationHelper.isPersistentNotificationEnabled(this)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 try {
@@ -262,9 +282,9 @@ class BackgroundService : Service() {
     }
 
     companion object {
-        const val LOG_TAG = "KDE/BackgroundService"
+        private const val TAG = "KDE/BackgroundService"
 
-        const val UPDATE_IMMUTABLE_FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        private const val UPDATE_IMMUTABLE_FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         private const val FOREGROUND_NOTIFICATION_ID = 1
 
         var instance: BackgroundService? = null
@@ -281,27 +301,42 @@ class BackgroundService : Service() {
                 addTransportType(NetworkCapabilities.TRANSPORT_VPN)
                 addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
                 addTransportType(NetworkCapabilities.TRANSPORT_BLUETOOTH)
-                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     addTransportType(NetworkCapabilities.TRANSPORT_WIFI_AWARE)
                 }
-                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.S) {
-                    addTransportType(NetworkCapabilities.TRANSPORT_USB)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     addTransportType(NetworkCapabilities.TRANSPORT_LOWPAN)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    addTransportType(NetworkCapabilities.TRANSPORT_USB)
                 }
             }
         }
 
+        private fun startService(context: Context, intent: Intent) {
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: IllegalStateException) { // To catch ForegroundServiceStartNotAllowedException
+                Log.w(TAG, "Couldn't start BackgroundService", e)
+            }
+        }
+
         fun Start(context: Context) {
-            Log.d(LOG_TAG, "Start")
+            Log.d(TAG, "Start")
             val intent = Intent(context, BackgroundService::class.java)
-            ContextCompat.startForegroundService(context, intent)
+            startService(context, intent)
         }
 
         fun ForceRefreshConnections(context: Context) {
-            Log.d(LOG_TAG, "ForceRefreshConnections")
+            Log.d(TAG, "ForceRefreshConnections")
+            val service = instance
+            if (initialized && service != null) {
+                service.onNetworkChange(null)
+                return
+            }
             val intent = Intent(context, BackgroundService::class.java)
             intent.putExtra("refresh", true)
-            ContextCompat.startForegroundService(context, intent)
+            startService(context, intent)
         }
     }
 }

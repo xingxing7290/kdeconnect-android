@@ -58,7 +58,7 @@ class ControlPanelRestoreActivityTest {
             this["config"] = JsonHelper.json.parseToJsonElement(config.encode()) as JsonObject
         }))
     }
-    private fun plugin() = ControlPanelPlugin().apply { setContext(application, device); onCreate() }
+    private fun plugin() = ControlPanelPlugin().apply { setContext(application, this@ControlPanelRestoreActivityTest.device); onCreate() }
     @Before fun setup() {
         device = mockk {
             every { deviceId } returns id
@@ -75,7 +75,7 @@ class ControlPanelRestoreActivityTest {
         }
         application.devices[id] = device
         cacheOwner = ControlPanelPlugin().apply {
-            setContext(application, device)
+            setContext(application, this@ControlPanelRestoreActivityTest.device)
             preferences.edit().clear().commit()
             onCreate()
         }

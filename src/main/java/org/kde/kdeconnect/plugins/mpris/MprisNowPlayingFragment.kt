@@ -26,10 +26,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.net.toUri
 import androidx.core.view.MenuProvider
-import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
-import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.KdeConnect
+import org.kde.kdeconnect.base.BaseFragment
 import org.kde.kdeconnect.helpers.DEFAULT_MAX_VOLUME
 import org.kde.kdeconnect.helpers.DEFAULT_VOLUME_STEP
 import org.kde.kdeconnect.helpers.VideoUrlsHelper
@@ -45,15 +44,14 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private typealias MprisPlayerCallback = (MprisPlayer) -> Unit
 
-class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
-    private lateinit var mprisControlBinding: MprisControlBinding
-    private lateinit var activityMprisBinding: MprisNowPlayingBinding
-    private lateinit var deviceId: String
+class MprisNowPlayingFragment : BaseFragment<MprisNowPlayingBinding>(), VolumeKeyListener {
+    private val mprisControlBinding: MprisControlBinding get() = binding.mprisControl
+    private lateinit var plugin: MprisPlugin
 
     private val positionSeekUpdateHandler = Handler(Looper.getMainLooper())
     private val positionSeekUpdateRunnable = object : Runnable {
         override fun run() {
-            if (!isAdded) return // Fragment was already detached
+            if (!hasBinding) return // View was already destroyed
 
             targetPlayer?.let {
                 mprisControlBinding.positionSeek.progress = it.position.toInt()
@@ -72,11 +70,12 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
         showRemainingTime = savedInstanceState?.getBoolean("showRemainingTime") ?: false
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        activityMprisBinding = MprisNowPlayingBinding.inflate(inflater)
-        mprisControlBinding = activityMprisBinding.mprisControl
+    override fun onInflateBinding(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): MprisNowPlayingBinding {
+        return MprisNowPlayingBinding.inflate(inflater, container, false)
+    }
 
-        deviceId = arguments?.getString(EXTRA_DEVICE_ID)!!
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
         val activityIntent = requireActivity().intent
 
@@ -90,13 +89,20 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
                 Log.i("MprisNowPlayingFragment", "No `targetPlayer` specified in savedInstanceState")
             }
 
-        connectToPlugin()
+        val deviceId = requireArguments().getString(EXTRA_DEVICE_ID)!!
+        val device = KdeConnect.getInstance().getDevice(deviceId)
+        setActionBarText(getString(R.string.open_mpris_controls), device?.name)
+        plugin = device?.getPlugin<MprisPlugin>() ?: run {
+            requireActivity().finish()
+            return
+        }
+        targetPlayer = plugin.getPlayerStatus(targetPlayerName)
+        registerPluginHandlers()
 
-        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
-        val intervalTime = prefs.getString(
-            getString(R.string.mpris_time_key),
-            getString(R.string.mpris_time_default)
-        )!!.toInt()
+        // Despite being a number, mpris_time_key is a ListPreference, which are always stored as String
+        val intervalTimeStr = plugin.preferences.getString(getString(R.string.mpris_time_key), null)
+            ?: getString(R.string.mpris_time_default)
+        val intervalTime = intervalTimeStr.toInt()
 
         performActionOnClick(mprisControlBinding.loopButton) { p: MprisPlayer ->
             when (p.loopStatus) {
@@ -164,44 +170,38 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
 
         mprisControlBinding.nowPlayingTextview.isSelected = true
 
-        return activityMprisBinding.root
+        addOpenUrlMenuProvider()
     }
 
     override fun onResume() {
         super.onResume()
-        KdeConnect.getInstance().getDevicePlugin<MprisPlugin>(deviceId)?.isControlActivityVisible = true
+        if (::plugin.isInitialized) {
+            plugin.isControlActivityVisible = true
+        }
     }
 
     override fun onPause() {
-        KdeConnect.getInstance().getDevicePlugin<MprisPlugin>(deviceId)?.isControlActivityVisible = false
+        if (::plugin.isInitialized) {
+            plugin.isControlActivityVisible = false
+        }
         super.onPause()
     }
 
     override fun onDestroyView() {
         positionSeekUpdateHandler.removeCallbacks(positionSeekUpdateRunnable)
-        disconnectFromPlugin()
+        unregisterPluginHandlers()
         mprisControlBinding.playerSpinner.adapter = null
         super.onDestroyView()
     }
 
-    private fun disconnectFromPlugin() {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MprisPlugin>(deviceId) ?: return
-        plugin.apply {
-            removePlayerListUpdatedHandler("activity")
-            removePlayerStatusUpdatedHandler("activity")
+    private fun unregisterPluginHandlers() {
+        if (::plugin.isInitialized) {
+            plugin.removePlayerListUpdatedHandler("activity")
+            plugin.removePlayerStatusUpdatedHandler("activity")
         }
     }
 
-    private fun connectToPlugin() {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MprisPlugin>(deviceId)
-        if (plugin == null) {
-            if (isAdded) {
-                requireActivity().finish()
-            }
-            return
-        }
-        targetPlayer = plugin.getPlayerStatus(targetPlayerName)
-
+    private fun registerPluginHandlers() {
         plugin.setPlayerStatusUpdatedHandler("activity") {
             val activity = activity ?: return@setPlayerStatusUpdatedHandler
             activity.runOnUiThread {
@@ -211,6 +211,7 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
         plugin.setPlayerListUpdatedHandler("activity") {
             val activity = activity ?: return@setPlayerListUpdatedHandler
             activity.runOnUiThread {
+                if (!hasBinding) return@runOnUiThread
                 val playerList = plugin.playerList
                 val adapter = ArrayAdapter(
                     activity,
@@ -288,8 +289,8 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
     }
 
     private fun updatePlayerStatus(plugin: MprisPlugin) {
-        if (!isAdded) {
-            //Fragment is not attached to an activity. We will crash if we try to do anything here.
+        if (!hasBinding) {
+            // View was already destroyed (or not created yet). We will crash if we try to do anything here.
             return
         }
         val activity = requireActivity()
@@ -312,9 +313,9 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
         val albumArt = playerStatus.getAlbumArt()
         if (albumArt == null) {
             val drawable = ContextCompat.getDrawable(activity, R.drawable.ic_album_art_placeholder)!!
-            activityMprisBinding.albumArt.setImageDrawable(DrawableCompat.wrap(drawable))
+            binding.albumArt.setImageDrawable(DrawableCompat.wrap(drawable))
         } else {
-            activityMprisBinding.albumArt.setImageBitmap(albumArt)
+            binding.albumArt.setImageBitmap(albumArt)
         }
 
         if (playerStatus.isSeekAllowed) {
@@ -338,6 +339,12 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
         } else {
             mprisControlBinding.playButton.setIconResource(R.drawable.ic_play_black)
             mprisControlBinding.playButton.isEnabled = playerStatus.isPlayAllowed
+        }
+
+        mprisControlBinding.stopButton.visibility = if (playerStatus.isStopAllowed) {
+            View.VISIBLE
+        } else {
+            View.GONE
         }
 
         val loopStatus = playerStatus.loopStatus
@@ -402,8 +409,7 @@ class MprisNowPlayingFragment : Fragment(), VolumeKeyListener {
         }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    private fun addOpenUrlMenuProvider() {
         activity?.addMenuProvider(object : MenuProvider {
             override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
                 menu.add(0, MENU_OPEN_URL, Menu.NONE, R.string.mpris_open_url)

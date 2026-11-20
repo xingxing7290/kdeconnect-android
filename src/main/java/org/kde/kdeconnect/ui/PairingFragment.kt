@@ -28,13 +28,13 @@ import androidx.core.content.edit
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.kde.kdeconnect.BackgroundService.Companion.ForceRefreshConnections
-import org.kde.kdeconnect.BackgroundService.Companion.instance
+import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.base.BaseFragment
-import org.kde.kdeconnect.helpers.TrustedNetworkHelper.Companion.isTrustedNetwork
+import org.kde.kdeconnect.helpers.TrustedNetworkHelper
 import org.kde.kdeconnect.ui.compose.KdeTheme
 import org.kde.kdeconnect.ui.compose.screen.pairing.PairingScreen
 import org.kde.kdeconnect.ui.compose.screen.pairing.PairingViewModel
@@ -50,6 +50,9 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
 
     private var listRefreshCalledThisFrame = false
 
+    // Single instance so we don't create one observer per updateDeviceList call
+    private val connectivityObserver = Observer<Boolean> { updateConnectivityInfoHeader(it) }
+
     private val menuProvider = object : MenuProvider {
 
         override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -64,12 +67,12 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
                 }
 
                 R.id.menu_custom_device_list -> {
-                    startActivity(Intent(mActivity, CustomDevicesActivity::class.java))
+                    startActivity(Intent(activity, CustomDevicesActivity::class.java))
                     true
                 }
 
                 R.id.menu_trusted_networks -> {
-                    startActivity(Intent(mActivity, TrustedNetworksActivity::class.java))
+                    startActivity(Intent(activity, TrustedNetworksActivity::class.java))
                     true
                 }
 
@@ -77,8 +80,6 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
             }
         }
     }
-
-    override fun getActionBarTitle() = getString(R.string.pairing_title)
 
     override fun onInflateBinding(
         inflater: LayoutInflater,
@@ -88,8 +89,9 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        setActionBarText(getString(R.string.pairing_title))
 
-        mActivity?.addMenuProvider(menuProvider, viewLifecycleOwner, Lifecycle.State.RESUMED)
+        activity?.addMenuProvider(menuProvider, viewLifecycleOwner, Lifecycle.State.RESUMED)
 
         createComposeView()
     }
@@ -169,7 +171,7 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
                 updatePermissionsHeader()
-                ForceRefreshConnections(requireContext())
+                BackgroundService.ForceRefreshConnections(requireContext())
             }
         }
 
@@ -201,14 +203,12 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
         listRefreshCalledThisFrame = true
 
         //Check if we're on Wi-Fi/Local network. If we still see a device, don't do anything special
-        val service = instance
+        val service = BackgroundService.instance
         if (service == null) {
             updateConnectivityInfoHeader(isConnectedToNonCellularNetwork = true)
         } else {
-            service.isConnectedToNonCellularNetwork.observe(
-                viewLifecycleOwner,
-                ::updateConnectivityInfoHeader
-            )
+            // Observed here rather than in onViewCreated() because the service may not exist yet at that point
+            service.isConnectedToNonCellularNetwork.observe(viewLifecycleOwner, connectivityObserver)
         }
 
         updatePermissionsHeader()
@@ -229,7 +229,7 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
     private fun updateConnectivityInfoHeader(isConnectedToNonCellularNetwork: Boolean) {
         viewModel.updateConnectivity(
             isWifiAvailable = isConnectedToNonCellularNetwork,
-            isTrustedNetwork = isTrustedNetwork(requireContext())
+            isTrustedNetwork = TrustedNetworkHelper.isTrustedNetwork(requireContext())
         )
     }
 
@@ -249,9 +249,9 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
     override fun onStart() {
         super.onStart()
         KdeConnect.getInstance().addDeviceListChangedCallback("PairingFragment") {
-            mActivity?.runOnUiThread { this.updateDeviceList() }
+            activity?.runOnUiThread { this.updateDeviceList() }
         }
-        ForceRefreshConnections(requireContext()) // force a network re-discover
+        BackgroundService.ForceRefreshConnections(requireContext()) // force a network re-discover
         updateDeviceList()
     }
 
@@ -261,7 +261,7 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
     }
 
     fun deviceClicked(device: Device) {
-        (mActivity as? MainActivity)?.onDeviceSelected(
+        (activity as? MainActivity)?.onDeviceSelected(
             device.deviceId,
             !device.isPaired || !device.isReachable
         )

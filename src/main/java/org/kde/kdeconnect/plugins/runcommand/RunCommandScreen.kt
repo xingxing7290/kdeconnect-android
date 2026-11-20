@@ -13,13 +13,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
@@ -55,8 +53,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.kde.kdeconnect.Device
+import org.kde.kdeconnect.ui.compose.KdeDropdownMenuItem
+import org.kde.kdeconnect.ui.compose.KdeOverflowMenu
 import org.kde.kdeconnect.ui.compose.KdeTheme
 import org.kde.kdeconnect.ui.compose.KdeTopAppBar
+import org.kde.kdeconnect.ui.compose.components.DeviceDisconnectedOverlay
 import org.kde.kdeconnect_tp.R
 import kotlin.time.Duration.Companion.seconds
 
@@ -89,6 +90,8 @@ fun RunCommandScreen(
         }
     }
 
+    val isReachable by device.isReachableFlow.collectAsStateWithLifecycle()
+
     val showOutputCard = commandList.isNotEmpty() &&
         device.canSendPacketType(RunCommandPlugin.PACKET_TYPE_RUNCOMMAND_OUTPUT)
 
@@ -105,7 +108,7 @@ fun RunCommandScreen(
                 )
             },
             floatingActionButton = {
-                if (plugin.canAddCommand()) {
+                if (plugin.canAddCommand() && isReachable) {
                     FloatingActionButton(onClick = {
                         plugin.sendSetupPacket()
                         showDialog = true
@@ -177,6 +180,8 @@ fun RunCommandScreen(
                     Text(text)
                 }
             }
+
+            DeviceDisconnectedOverlay(device, Modifier.padding(it))
         }
     }
 }
@@ -362,21 +367,11 @@ fun RunCommandAppBar(
                 )
             }
             if (showClearOutput) {
-                var menuExpanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Default.MoreVert, stringResource(R.string.extra_options))
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.runcommand_clear_output)) },
-                        onClick = {
-                            menuExpanded = false
-                            onClearOutput()
-                        },
-                    )
+                KdeOverflowMenu { dismiss ->
+                    KdeDropdownMenuItem(stringResource(R.string.runcommand_clear_output)) {
+                        dismiss()
+                        onClearOutput()
+                    }
                 }
             }
         },

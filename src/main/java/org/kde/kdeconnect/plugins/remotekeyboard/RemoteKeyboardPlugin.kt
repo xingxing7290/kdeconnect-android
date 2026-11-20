@@ -8,7 +8,6 @@ package org.kde.kdeconnect.plugins.remotekeyboard
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -20,6 +19,7 @@ import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT
 import androidx.annotation.RequiresApi
+import androidx.core.content.getSystemService
 import androidx.fragment.app.DialogFragment
 import org.kde.kdeconnect.KdeConnectAccessibilityService
 import org.kde.kdeconnect.NetworkPacket
@@ -40,8 +40,7 @@ class RemoteKeyboardPlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_remotekeyboard_desc)
 
-    override val minSdk: Int
-        get() = Build.VERSION_CODES.O
+    override val minSdk: Int = Build.VERSION_CODES.O
 
     override val permissionExplanationDialog: DialogFragment
         get() = StartActivityAlertDialogFragment.Builder()
@@ -58,12 +57,11 @@ class RemoteKeyboardPlugin : Plugin() {
         const val PACKET_TYPE_MOUSEPAD_ECHO: String = "kdeconnect.mousepad.echo"
         const val PACKET_TYPE_MOUSEPAD_KEYBOARDSTATE: String = "kdeconnect.mousepad.keyboardstate"
 
-        private const val LOG_TAG = "RemoteKeyboardPlugin"
+        private const val TAG = "RemoteKeyboardPlugin"
     }
 
     override fun checkRequiredPermissions(): Boolean {
-        val accessibilityManager =
-            context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        val accessibilityManager = context.getSystemService<AccessibilityManager>()!!
         val enabledServices = accessibilityManager.getEnabledAccessibilityServiceList(
             AccessibilityServiceInfo.FEEDBACK_ALL_MASK
         )
@@ -102,7 +100,7 @@ class RemoteKeyboardPlugin : Plugin() {
         }
 
         if (!handleKey(np)) {
-            Log.i(LOG_TAG, "Could not handle event!")
+            Log.i(TAG, "Could not handle event!")
             return false
         }
 

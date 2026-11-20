@@ -105,9 +105,6 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
 
             NotificationReceiver.RunCommand(context) { service: NotificationReceiver ->
                 service.addListener(this@MprisMediaSession)
-                if (service.isConnected) {
-                    onListenerConnected(service)
-                }
             }
         }
 
@@ -518,7 +515,7 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
         this.packageName == SPOTIFY_PACKAGE_NAME
 
     companion object {
-        const val TAG = "MprisMediaSession"
+        private const val TAG = "MprisMediaSession"
 
         private const val MPRIS_MEDIA_NOTIFICATION_ID =
             0x91b70463.toInt() // echo MprisNotification | md5sum | head -c 8

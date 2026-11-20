@@ -26,6 +26,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.kde.kdeconnect.DeviceStats.countReceived
 import org.kde.kdeconnect.DeviceStats.countSent
@@ -67,6 +70,14 @@ class Device : PacketReceiver {
 
     private val links = CopyOnWriteArrayList<BaseLink>()
 
+    private val _isReachableFlow = MutableStateFlow(false)
+
+    /**
+     * Same as [isReachable], but observable. It gets updated after the plugins have been
+     * loaded (on connection) or destroyed (on disconnection).
+     */
+    val isReachableFlow: StateFlow<Boolean> = _isReachableFlow.asStateFlow()
+
     /**
      * Plugins that have matching capabilities.
      */
@@ -98,6 +109,7 @@ class Device : PacketReceiver {
     private val pluginsChangedListeners = CopyOnWriteArrayList<PluginsChangedListener>()
 
     private val sendChannel = Channel<NetworkPacketWithCallback>(Channel.UNLIMITED)
+    @Volatile
     private var sendCoroutine : Job? = null
 
     /**
@@ -135,9 +147,6 @@ class Device : PacketReceiver {
     fun interface PluginsChangedListener {
         fun onPluginsChanged(device: Device)
     }
-
-    val connectivityType: String?
-        get() = links.firstOrNull()?.name
 
     val name: String
         get() = deviceInfo.name
@@ -314,8 +323,11 @@ class Device : PacketReceiver {
         get() = links.isNotEmpty()
 
     fun addLink(link: BaseLink) {
+        var unsent = emptyList<NetworkPacketWithCallback>()
         synchronized(sendChannel) {
             if (sendCoroutine == null) {
+                // Packets that raced with removeLink() could still be in the channel, don't send them now
+                unsent = drainSendChannel()
                 sendCoroutine = CoroutineScope(Dispatchers.IO).launch {
                     for ((np, callback) in sendChannel) {
                         sendPacketBlocking(np, callback)
@@ -323,6 +335,7 @@ class Device : PacketReceiver {
                 }
             }
         }
+        failUnsentPackets(unsent)
 
         // FilesHelper.LogOpenFileCount();
         links.add(link)
@@ -348,6 +361,8 @@ class Device : PacketReceiver {
         if (hasChanges || links.size == 1) {
             reloadPluginsFromSettings()
         }
+
+        _isReachableFlow.value = isReachable
     }
 
     @WorkerThread
@@ -362,10 +377,26 @@ class Device : PacketReceiver {
         )
         if (links.isEmpty()) {
             reloadPluginsFromSettings()
-            synchronized(sendChannel) {
+            val unsent = synchronized(sendChannel) {
                 sendCoroutine?.cancel(CancellationException("Device disconnected"))
                 sendCoroutine = null
+                drainSendChannel()
             }
+            failUnsentPackets(unsent)
+        }
+
+        _isReachableFlow.value = isReachable
+    }
+
+    private fun drainSendChannel(): List<NetworkPacketWithCallback> = buildList {
+        while (true) {
+            add(sendChannel.tryReceive().getOrNull() ?: break)
+        }
+    }
+
+    private fun failUnsentPackets(unsent: List<NetworkPacketWithCallback>) {
+        unsent.forEach { (np, callback) ->
+            callback.onFailure(Exception("Device disconnected, packet ${np.type} not sent"))
         }
     }
 
@@ -479,6 +510,10 @@ class Device : PacketReceiver {
      */
     @AnyThread
     fun sendPacket(np: NetworkPacket, callback: SendPacketStatusCallback) {
+        if (sendCoroutine == null) {
+            callback.onFailure(Exception("Device disconnected, packet ${np.type} not sent"))
+            return
+        }
         sendChannel.trySend(NetworkPacketWithCallback(np, callback))
     }
 
@@ -559,8 +594,6 @@ class Device : PacketReceiver {
     // - all permissions granted: loadedPlugins only
     // returns true if the plugin ended up in loadedPlugins
     private fun addPlugin(pluginKey: String): Boolean {
-        val isNewPlugin = !loadedPlugins.containsKey(pluginKey)
-
         val plugin = loadedPlugins[pluginKey]
             ?: PluginFactory.instantiatePluginForDevice(context, pluginKey, this)
                 ?: return false
@@ -578,6 +611,7 @@ class Device : PacketReceiver {
                 loadedPlugins[pluginKey] = plugin
             } else {
                 loadedPlugins.remove(pluginKey)
+                destroyPlugin(pluginKey, plugin) // In case it was loaded before losing the permission
                 return false
             }
         } else {
@@ -593,12 +627,8 @@ class Device : PacketReceiver {
             }
         }
 
-        if (!isNewPlugin) {
-            return true
-        }
-
         try {
-            plugin.onCreate()
+            plugin.create()
         } catch (e : Exception) {
             Log.e("KDE/addPlugin", "plugin failed to load $pluginKey", e)
             removePlugin(pluginKey)
@@ -614,14 +644,16 @@ class Device : PacketReceiver {
         pluginsWithoutOptionalPermissions.remove(pluginKey)
         if (plugin == null) return false
 
+        destroyPlugin(pluginKey, plugin)
+        return true
+    }
+
+    private fun destroyPlugin(pluginKey: String, plugin: Plugin) {
         try {
-            plugin.onDestroy()
-            // Log.e("removePlugin","removed $pluginKey");
+            plugin.destroy()
         } catch (e: Exception) {
             Log.e("KDE/removePlugin", "Exception calling onDestroy for plugin $pluginKey", e)
         }
-
-        return true
     }
 
     fun setPluginEnabled(pluginKey: String, value: Boolean) {
@@ -656,6 +688,7 @@ class Device : PacketReceiver {
     @WorkerThread
     fun reloadPluginsFromSettings() {
         Log.i("Device", "${deviceInfo.name}: reloading plugins")
+        val isReachable = this.isReachable
         val newPluginsByIncomingInterface = mutableMapOf<String, MutableList<String>>()
 
         val existingPluginKeys = loadedPlugins.keys + pluginsWithoutPermissions.keys + pluginsWithoutOptionalPermissions.keys
@@ -663,18 +696,25 @@ class Device : PacketReceiver {
 
         supportedPlugins.forEach { pluginKey ->
             val pluginInfo = PluginFactory.getPluginInfo(pluginKey)
-            val listenToUnpaired = pluginInfo.listenToUnpaired
+            val canLoad = if (isPaired) {
+                // Kept-alive plugins aren't instantiated while unreachable, only kept if they already were
+                isReachable || (pluginInfo.keepAliveWhenUnreachable && loadedPlugins.containsKey(pluginKey))
+            } else {
+                isReachable && pluginInfo.listenToUnpaired
+            }
+            val pluginEnabled = canLoad && isPluginEnabled(pluginKey)
 
-            val pluginEnabled = (isPaired || listenToUnpaired) && this.isReachable && isPluginEnabled(pluginKey)
-
-            if (pluginEnabled) {
+            if (!pluginEnabled) {
+                removePlugin(pluginKey)
+            } else if (isReachable) {
                 if (addPlugin(pluginKey)) {
                     pluginInfo.supportedPacketTypes.forEach { packetType ->
                         newPluginsByIncomingInterface.getOrPut(packetType) { mutableListOf() }.add(pluginKey)
                     }
                 }
             } else {
-                removePlugin(pluginKey)
+                // Kept alive, but destroyed until the device is reachable again
+                loadedPlugins[pluginKey]?.let { destroyPlugin(pluginKey, it) }
             }
         }
 

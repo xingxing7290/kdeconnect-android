@@ -118,7 +118,7 @@ class ControlPanelPluginTest {
             }
         }
         plugin = ControlPanelPlugin().apply {
-            setContext(ApplicationProvider.getApplicationContext<Application>(), device)
+            setContext(ApplicationProvider.getApplicationContext<Application>(), this@ControlPanelPluginTest.device)
             preferences.edit().clear().commit()
         }
     }

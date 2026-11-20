@@ -19,12 +19,11 @@ import android.os.Handler
 import androidx.annotation.RequiresApi
 import androidx.annotation.WorkerThread
 import androidx.core.content.ContextCompat
-import com.klinker.android.logger.Log
 import com.klinker.android.send_message.Transaction
 import kotlinx.serialization.json.JsonArray
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.SMSHelper
-import org.kde.kdeconnect.helpers.SMSHelper.MessageLooper.Companion.getLooper
+import org.kde.kdeconnect.helpers.SMSHelper.MessageLooper
 import org.kde.kdeconnect.helpers.SMSHelper.ThreadID
 import org.kde.kdeconnect.helpers.SMSHelper.getConversations
 import org.kde.kdeconnect.helpers.SMSHelper.getMessagesInRange
@@ -32,7 +31,7 @@ import org.kde.kdeconnect.helpers.SMSHelper.getMessagesInThread
 import org.kde.kdeconnect.helpers.SMSHelper.getNewestMessageTimestamp
 import org.kde.kdeconnect.helpers.SMSHelper.jsonArrayToAddressList
 import org.kde.kdeconnect.helpers.SMSHelper.jsonArrayToAttachmentsList
-import org.kde.kdeconnect.helpers.ThreadHelper.execute
+import org.kde.kdeconnect.helpers.ThreadHelper
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.plugins.sms.SmsMmsUtils.partIdToMessageAttachmentPacket
@@ -95,7 +94,8 @@ class SMSPlugin : Plugin() {
         }
     }
 
-    private val messageObserver: ContentObserver = MessageContentObserver(Handler(getLooper()!!))
+    // Lazy so we don't start a thread in the constructor
+    private val messageObserver: ContentObserver by lazy { MessageContentObserver(MessageLooper.handler) }
 
 
     /**
@@ -163,13 +163,13 @@ class SMSPlugin : Plugin() {
 
     override fun onPacketReceived(np: NetworkPacket): Boolean = when (np.type) {
         PACKET_TYPE_SMS_REQUEST_CONVERSATIONS -> {
-            execute {
+            ThreadHelper.runOnNewThread {
                 this.handleRequestAllConversations(np)
             }
             true
         }
         PACKET_TYPE_SMS_REQUEST_CONVERSATION -> {
-            execute {
+            ThreadHelper.runOnNewThread {
                 this.handleRequestSingleConversation(np)
             }
             true
@@ -246,7 +246,7 @@ class SMSPlugin : Plugin() {
         return true
     }
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
 
     override val settingsScope = SettingsScope.APP_WIDE
 

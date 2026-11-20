@@ -25,9 +25,6 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.net.toUri
 import org.kde.kdeconnect.NetworkPacket
-import org.kde.kdeconnect.async.BackgroundJob
-import org.kde.kdeconnect.async.BackgroundJobHandler
-import org.kde.kdeconnect.async.BackgroundJobHandler.Companion.newFixedThreadPoolBackgroundJobHandler
 import org.kde.kdeconnect.helpers.FilesHelper.uriToNetworkPacket
 import org.kde.kdeconnect.helpers.IntentHelper
 import org.kde.kdeconnect.helpers.IntentHelper.startActivityFromBackgroundOrCreateNotification
@@ -42,22 +39,14 @@ import org.kde.kdeconnect_tp.R
  * A Plugin for sharing and receiving files and uris.
  *
  *
- * All of the associated I/O work is scheduled on background
- * threads by [BackgroundJobHandler].
+ * All of the associated I/O work runs on background threads, see [ShareJob].
  *
  */
 @LoadablePlugin
 class SharePlugin : Plugin() {
-    private val backgroundJobHandler: BackgroundJobHandler = newFixedThreadPoolBackgroundJobHandler(5)
     private val handler: Handler = Handler(Looper.getMainLooper())
-    private val receiveFileJobCallback: Callback = Callback()
     private var receiveFileJob: CompositeReceiveFileJob? = null
     private var uploadFileJob: CompositeUploadFileJob? = null
-
-    private inner class Callback : BackgroundJob.Callback<Unit> {
-        override fun onResult(job: BackgroundJob<*, *>, result: Unit) = jobDone(job)
-        override fun onError(job: BackgroundJob<*, *>, error: Throwable) = jobDone(job)
-    }
 
     override fun onCreate() {
         createOrUpdateDynamicShortcut()
@@ -68,7 +57,7 @@ class SharePlugin : Plugin() {
     override fun onDestroy() {
         for (shortcut in ShortcutManagerCompat.getDynamicShortcuts(context)) {
             if (shortcut.id != device.deviceId) continue
-            if (!device.isReachable && shortcut.isPinned) {
+            if (!device.isReachable && shortcut.isPinned && device.isPluginEnabled(pluginKey)) {
                 // Create an updated shortcut with the same ID
                 createOrUpdateDynamicShortcut(shortcut)
                 break
@@ -158,7 +147,7 @@ class SharePlugin : Plugin() {
             })
     }
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
 
     override val settingsScope = SettingsScope.APP_WIDE
 
@@ -221,12 +210,12 @@ class SharePlugin : Plugin() {
             return
         }
 
-        val job = CompositeReceiveFileJob(device, receiveFileJobCallback)
+        val job = CompositeReceiveFileJob(device, ::jobDone)
         job.addNetworkPacket(np)
         if (canAddToBatch) {
             receiveFileJob = job
         }
-        backgroundJobHandler.runJob(job)
+        job.start()
     }
 
     fun sendUrls(urls: List<String>) {
@@ -258,10 +247,10 @@ class SharePlugin : Plugin() {
                 return
             }
 
-            val job = CompositeUploadFileJob(device, receiveFileJobCallback)
+            val job = CompositeUploadFileJob(device, ::jobDone)
             job.addNetworkPackets(packets)
             uploadFileJob = job
-            backgroundJobHandler.runJob(job)
+            job.start()
         } finally {
             onComplete?.invoke()
         }
@@ -271,7 +260,7 @@ class SharePlugin : Plugin() {
         val streams = IntentHelper.streamsFromIntent(intent)
         if (streams.isNotEmpty()) {
             Log.i(TAG, "Intent contains files to share")
-            ThreadHelper.execute { sendFiles(streams, onComplete) }
+            ThreadHelper.runOnNewThread { sendFiles(streams, onComplete) }
             return
         }
         try {
@@ -313,21 +302,11 @@ class SharePlugin : Plugin() {
             arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-    private fun jobDone(job: BackgroundJob<*, *>) {
+    private fun jobDone(job: ShareJob) {
         if (job === receiveFileJob) {
             receiveFileJob = null
         } else if (job === uploadFileJob) {
             uploadFileJob = null
-        }
-    }
-
-    fun cancelJob(jobId: Long) {
-        if (backgroundJobHandler.isRunning(jobId)) {
-            val job = backgroundJobHandler.getJob(jobId)
-            if (job != null) {
-                job.cancel()
-                jobDone(job)
-            }
         }
     }
 
@@ -339,18 +318,17 @@ class SharePlugin : Plugin() {
     }
 
     companion object {
-        const val TAG : String = "SharePlugin"
+        private const val TAG : String = "SharePlugin"
 
-        const val ACTION_CANCEL_SHARE: String = "org.kde.kdeconnect.plugins.share.CancelShare"
-        const val CANCEL_SHARE_DEVICE_ID_EXTRA: String = "deviceId"
-        const val CANCEL_SHARE_BACKGROUND_JOB_ID_EXTRA: String = "backgroundJobId"
+        internal const val ACTION_CANCEL_SHARE: String = "org.kde.kdeconnect.plugins.share.CancelShare"
+        internal const val CANCEL_SHARE_BACKGROUND_JOB_ID_EXTRA: String = "backgroundJobId"
 
         private const val PACKET_TYPE_SHARE_REQUEST = "kdeconnect.share.request"
-        const val PACKET_TYPE_SHARE_REQUEST_UPDATE: String = "kdeconnect.share.request.update"
+        internal const val PACKET_TYPE_SHARE_REQUEST_UPDATE: String = "kdeconnect.share.request.update"
 
-        const val KEY_NUMBER_OF_FILES: String = "numberOfFiles"
-        const val KEY_TOTAL_PAYLOAD_SIZE: String = "totalPayloadSize"
+        internal const val KEY_NUMBER_OF_FILES: String = "numberOfFiles"
+        internal const val KEY_TOTAL_PAYLOAD_SIZE: String = "totalPayloadSize"
 
-        const val KEY_UNREACHABLE_URL_LIST: String = "key_unreachable_url_list"
+        internal const val KEY_UNREACHABLE_URL_LIST: String = "key_unreachable_url_list"
     }
 }

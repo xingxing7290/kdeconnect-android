@@ -7,7 +7,6 @@
 package org.kde.kdeconnect.plugins.digitizer
 
 import android.annotation.SuppressLint
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.Gravity
 import android.view.Menu
@@ -17,15 +16,14 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.addCallback
-import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.base.BaseActivity
 import org.kde.kdeconnect.extensions.viewBinding
 import org.kde.kdeconnect.ui.PluginSettingsActivity
+import org.kde.kdeconnect.ui.compose.components.addDeviceDisconnectedOverlay
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.ActivityDigitizerBinding
 import kotlin.math.roundToInt
@@ -33,36 +31,20 @@ import kotlin.math.roundToInt
 class DigitizerActivity : BaseActivity<ActivityDigitizerBinding>(), DrawingPadView.EventListener {
     override val binding: ActivityDigitizerBinding by viewBinding(ActivityDigitizerBinding::inflate)
 
-    private lateinit var prefs: SharedPreferences
-
     private lateinit var fullscreenBackCallback: OnBackPressedCallback
 
-    private lateinit var deviceId: String
-
-    private val plugin: DigitizerPlugin?
-        get() {
-            val plugin = KdeConnect.getInstance().getDevicePlugin<DigitizerPlugin>(deviceId)
-            if (plugin == null)
-                finish()
-            return plugin
-        }
-
-    private var prefHideDrawButton: Boolean
-        get() = prefs.getBoolean(getString(R.string.digitizer_preference_key_hide_draw_button), false)
-        set(value) = prefs.edit {
-            putBoolean(getString(R.string.digitizer_preference_key_hide_draw_button), value)
-        }
+    private lateinit var plugin: DigitizerPlugin
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)!!
+        plugin = KdeConnect.getInstance().getDevicePlugin<DigitizerPlugin>(intent.getStringExtra(EXTRA_DEVICE_ID))
+            ?: return finish()
+        binding.root.addDeviceDisconnectedOverlay(plugin.device)
 
         setSupportActionBar(binding.toolbarLayout.toolbar)
         supportActionBar!!.setDisplayHomeAsUpEnabled(true)
         supportActionBar!!.setDisplayShowHomeEnabled(true)
-
-        prefs = PreferenceManager.getDefaultSharedPreferences(this)
 
         binding.drawingPad.eventListener = this
 
@@ -116,7 +98,7 @@ class DigitizerActivity : BaseActivity<ActivityDigitizerBinding>(), DrawingPadVi
         // During onStart, the views aren't laid out yet.
         // We must wait a frame for the view to get laid out before we can query its size.
         binding.drawingPad.post {
-            plugin?.startSession(
+            plugin.startSession(
                 binding.drawingPad.width,
                 binding.drawingPad.height,
                 (resources.displayMetrics.xdpi * INCHES_TO_MM).roundToInt(),
@@ -124,13 +106,14 @@ class DigitizerActivity : BaseActivity<ActivityDigitizerBinding>(), DrawingPadVi
             )
         }
 
+        val prefHideDrawButton = plugin.preferences.getBoolean(getString(R.string.digitizer_preference_key_hide_draw_button), false)
         if (prefHideDrawButton) {
             binding.buttonDraw.visibility = View.GONE
         }
 
         binding.buttonDraw.layoutParams = (binding.buttonDraw.layoutParams as FrameLayout.LayoutParams).also {
             @SuppressLint("RtlHardcoded")
-            when (prefs.getString(getString(R.string.digitizer_preference_key_draw_button_side), "bottom_left")) {
+            when (plugin.preferences.getString(getString(R.string.digitizer_preference_key_draw_button_side), "bottom_left")) {
                 "top_left" -> it.gravity = Gravity.TOP or Gravity.LEFT
                 "top_right" -> it.gravity = Gravity.TOP or Gravity.RIGHT
                 "bottom_left" -> it.gravity = Gravity.BOTTOM or Gravity.LEFT
@@ -141,7 +124,9 @@ class DigitizerActivity : BaseActivity<ActivityDigitizerBinding>(), DrawingPadVi
 
     override fun onStop() {
         super.onStop()
-        plugin?.endSession()
+        if (::plugin.isInitialized) {
+            plugin.endSession()
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -157,7 +142,7 @@ class DigitizerActivity : BaseActivity<ActivityDigitizerBinding>(), DrawingPadVi
                 true
             }
             R.id.menu_open_settings -> {
-                startActivity(PluginSettingsActivity.createIntent(this, deviceId, DigitizerPlugin::class.java.simpleName))
+                startActivity(PluginSettingsActivity.createIntent(this, plugin.device.deviceId, DigitizerPlugin::class.java.simpleName))
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -165,7 +150,7 @@ class DigitizerActivity : BaseActivity<ActivityDigitizerBinding>(), DrawingPadVi
     }
 
     override fun onToolEvent(event: ToolEvent) {
-        plugin?.reportEvent(event)
+        plugin.reportEvent(event)
     }
 
     override fun onFingerTouchEvent(touching: Boolean) {

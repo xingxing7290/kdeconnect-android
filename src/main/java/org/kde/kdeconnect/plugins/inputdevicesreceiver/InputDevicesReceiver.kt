@@ -9,6 +9,7 @@ import android.hardware.display.DisplayManager
 import android.os.Build
 import android.util.DisplayMetrics
 import android.view.Display
+import androidx.core.content.getSystemService
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
@@ -43,7 +44,7 @@ class InputDevicesReceiverPlugin : Plugin() {
     override fun onCreate() {
         // We need to listen to display rotation changes, otherwise unintended behavior will happen
         // if the display rotates while we have the cursor.
-        displayManager = context.getSystemService(DisplayManager::class.java)
+        displayManager = context.getSystemService<DisplayManager>()!!
         resolveDisplaySize()
         displayManager.registerDisplayListener(displayListener, null)
     }

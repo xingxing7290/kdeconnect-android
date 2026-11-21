@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -103,6 +104,8 @@ fun ControlPanelScreen(
     onSynchronize: (() -> Unit)? = null,
     appearanceMode: PanelAppearanceMode = PanelAppearanceMode.SYSTEM,
     onAppearanceModeChange: ((PanelAppearanceMode) -> Unit)? = null,
+    hass: PanelHassState? = null,
+    onHassCommand: (entityId: String, action: String, brightness: Int) -> Unit = { _, _, _ -> },
 ) {
     val empty = remember { MutableStateFlow(PanelSessionState()) }
     val state by (session?.state ?: empty).collectAsState()
@@ -126,6 +129,8 @@ fun ControlPanelScreen(
     val slotEmpty = if (themed) palette.empty else Color(0xFF9BA5B4)
     val page = config?.page(state.activePageId) ?: config?.pages?.firstOrNull()
     val pages = if (config?.mode == "single") config.pages.filter { it.id == config.homePageId } else config?.pages.orEmpty()
+    // The idle dial swallows its waking tap, so the switchable list lives here instead.
+    var hassOpen by remember { mutableStateOf(false) }
     fun movePage(direction: Int) {
         val index = pages.indexOfFirst { it.id == page?.id }
         pages.getOrNull(index + direction)?.let { plugin?.selectPage(it.id) }
@@ -162,6 +167,11 @@ fun ControlPanelScreen(
                         Text(deviceName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, color = primary)
                         IconButton(onClick = { onSynchronize?.invoke() ?: plugin?.synchronize() }, enabled = plugin != null || onSynchronize != null) {
                             Icon(Icons.Default.Refresh, stringResource(R.string.control_panel_retry), tint = primary)
+                        }
+                        if (hass != null) {
+                            IconButton(onClick = { hassOpen = true }, modifier = Modifier.testTag("panel-hass-open")) {
+                                Icon(Icons.Default.Home, stringResource(R.string.control_panel_hass_open), tint = primary)
+                            }
                         }
                         onAppearanceModeChange?.let { change ->
                             PanelAppearanceSwitcher(appearanceMode, change, primary)
@@ -245,6 +255,15 @@ fun ControlPanelScreen(
                     }
                 }
             }
+        }
+        if (hassOpen) {
+            PanelHassSheet(
+                hass = hass,
+                connection = state.connection,
+                onCommand = onHassCommand,
+                onRefresh = { onSynchronize?.invoke() ?: plugin?.synchronize() },
+                onClose = { hassOpen = false },
+            )
         }
     }
 }

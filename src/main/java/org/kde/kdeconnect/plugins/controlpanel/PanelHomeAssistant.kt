@@ -4,6 +4,7 @@
 package org.kde.kdeconnect.plugins.controlpanel
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
@@ -89,7 +90,8 @@ data class PanelHassState(
 
             val status = text("status", 20) ?: return null
             require(status in STATUSES)
-            val error = text("error", 160, true) ?: return null
+            // The error text is cosmetic: an unusable one degrades to "no detail", never drops the packet.
+            val error = text("error", 160, true) ?: ""
             val fetched = integer("fetchedAt") ?: return null
             require(fetched in 0..4_102_444_800L)
             val array = body["entities"] as? kotlinx.serialization.json.JsonArray ?: return null
@@ -98,42 +100,45 @@ data class PanelHassState(
             val entities = ArrayList<PanelHassEntity>(array.size)
             val seen = HashSet<String>()
             for (element in array) {
-                val item = element as? JsonObject ?: return null
-                fun field(key: String, maximum: Int, allowEmpty: Boolean = false): String? {
-                    val value = (item[key] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
-                    return value.takeIf { it.length <= maximum && (allowEmpty || it.isNotBlank()) && it.none(Char::isISOControl) }
-                }
-                val id = field("id", 128) ?: return null
-                require(id.matches(ENTITY_ID))
-                require(seen.add(id))
-                val type = field("type", 16) ?: return null
-                require(type in PanelHassEntity.TYPES)
-                val name = field("name", 120, true) ?: return null
-                val state = field("state", 64, true) ?: return null
-                val group = if (item["group"] == null) null else field("group", 60) ?: return null
-                val unit = if (item["unit"] == null) null else field("unit", 16) ?: return null
-                val brightness = if (item["brightness"] == null) null
-                else (item["brightness"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull?.takeIf { it in 0..255 } ?: return null
-                val order = if (item["order"] == null) 0
-                else (item["order"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull?.takeIf { it in 0..MAX_ENTITIES } ?: return null
-                entities.add(PanelHassEntity(id, type, name, state, group, unit, brightness, order))
+                // A single malformed entity must not discard the whole snapshot: drop the item,
+                // keep the rest, so one odd friendly name cannot blank the dial.
+                val entity = parseEntity(element) ?: continue
+                if (!seen.add(entity.id)) continue
+                entities.add(entity)
             }
 
-            val lastEntity = if (body["lastCommand"] == null) null
-            else {
-                val command = body["lastCommand"] as? JsonObject ?: return null
-                (command["entityId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 128 }
-            }
-            val lastError = if (body["lastCommand"] == null) null
-            else {
-                val command = body["lastCommand"] as? JsonObject ?: return null
-                (command["error"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 64 }
-            }
+            // Command feedback is advisory; a malformed block must not invalidate the readings.
+            val command = body["lastCommand"] as? JsonObject
+            val lastEntity = (command?.get("entityId") as? JsonPrimitive)
+                ?.takeIf { it.isString }?.content?.takeIf { it.length <= 128 }
+            val lastError = (command?.get("error") as? JsonPrimitive)
+                ?.takeIf { it.isString }?.content?.takeIf { it.length <= 64 }
             PanelHassState(status, error, fetched, entities, lastEntity, lastError)
         } catch (_: Exception) {
             null
         }
 
         private val ENTITY_ID = Regex("^[a-z_]{1,32}\\.[a-z0-9_]{1,96}$")
+
+        /** Returns null for an unusable entry so [parse] can skip it instead of failing whole. */
+        private fun parseEntity(element: JsonElement): PanelHassEntity? {
+            val item = element as? JsonObject ?: return null
+            fun field(key: String, maximum: Int, allowEmpty: Boolean = false): String? {
+                val value = (item[key] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+                return value.takeIf { it.length <= maximum && (allowEmpty || it.isNotBlank()) && it.none(Char::isISOControl) }
+            }
+            fun number(key: String, range: IntRange): Int? = (item[key] as? JsonPrimitive)
+                ?.takeUnless { it.isString }?.intOrNull?.takeIf { it in range }
+
+            val id = field("id", 128)?.takeIf { it.matches(ENTITY_ID) } ?: return null
+            val type = field("type", 16)?.takeIf { it in PanelHassEntity.TYPES } ?: return null
+            val name = field("name", 120, true) ?: return null
+            val state = field("state", 64, true) ?: return null
+            val group = if (item["group"] == null) null else field("group", 60) ?: return null
+            val unit = if (item["unit"] == null) null else field("unit", 16) ?: return null
+            val brightness = if (item["brightness"] == null) null else number("brightness", 0..255) ?: return null
+            val order = if (item["order"] == null) 0 else number("order", 0..MAX_ENTITIES) ?: return null
+            return PanelHassEntity(id, type, name, state, group, unit, brightness, order)
+        }
     }
 }

@@ -83,4 +83,12 @@
     <string name="control_panel_dial_hass_offline">Computer is not connected to Home Assistant</string>
     <string name="control_panel_dial_hass_connecting">Connecting to Home Assistant…</string>
     <string name="control_panel_dial_hass_stale">Readings are out of date</string>
+    <string name="control_panel_dial_hass_unavailable">Unavailable</string>
+    <string name="control_panel_dial_hass_unknown">Unknown</string>
+    <string name="control_panel_hass_open">Smart home</string>
+    <string name="control_panel_hass_title">Smart home</string>
+    <string name="control_panel_hass_refresh">Refresh</string>
+    <string name="control_panel_hass_close">Close</string>
+    <string name="control_panel_hass_ready">Connected, updates arrive instantly</string>
+    <string name="control_panel_hass_error">Home Assistant error: %1$s</string>
 </resources>

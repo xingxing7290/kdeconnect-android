@@ -83,4 +83,12 @@
     <string name="control_panel_dial_hass_offline">电脑未连接 Home Assistant</string>
     <string name="control_panel_dial_hass_connecting">正在连接 Home Assistant…</string>
     <string name="control_panel_dial_hass_stale">数据已过期</string>
+    <string name="control_panel_dial_hass_unavailable">不可用</string>
+    <string name="control_panel_dial_hass_unknown">未知</string>
+    <string name="control_panel_hass_open">智能家居</string>
+    <string name="control_panel_hass_title">智能家居</string>
+    <string name="control_panel_hass_refresh">刷新</string>
+    <string name="control_panel_hass_close">关闭</string>
+    <string name="control_panel_hass_ready">已连接，状态实时更新</string>
+    <string name="control_panel_hass_error">Home Assistant 返回错误：%1$s</string>
 </resources>

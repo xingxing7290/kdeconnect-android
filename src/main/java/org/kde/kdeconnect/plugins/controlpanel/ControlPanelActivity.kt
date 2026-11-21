@@ -79,14 +79,15 @@ class ControlPanelActivity : AppCompatActivity() {
                 if (showing && state.config != null) {
                     PanelDialScreen(checkNotNull(state.config).idle, state.connection, onWake = { idle.wake() },
                         weather = state.weather, localWeather = localWeather, appearanceMode = appearanceMode,
-                        progress = state.progress, hass = state.hass,
-                        onHassCommand = { entityId, action, brightness -> plugin?.sendHassCommand(entityId, action, brightness) })
+                        progress = state.progress, hass = state.hass)
                 } else ControlPanelScreen(device?.name.orEmpty(), displaySession, plugin, volume,
                     onBack = { finish() }, assetCache = PanelAssetCache.get(this), onSynchronize = {
                         val current = plugin
                         if (current != null && device?.isReachable == true) current.synchronize()
                         else BackgroundService.ForceRefreshConnections(this)
-                    }, appearanceMode = appearanceMode, onAppearanceModeChange = ::updateAppearanceMode)
+                    }, appearanceMode = appearanceMode, onAppearanceModeChange = ::updateAppearanceMode,
+                    hass = state.hass,
+                    onHassCommand = { entityId, action, brightness -> plugin?.sendHassCommand(entityId, action, brightness) })
             }
         }
     }

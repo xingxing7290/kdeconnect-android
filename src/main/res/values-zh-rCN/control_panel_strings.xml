@@ -75,4 +75,12 @@
     <string name="control_panel_progress_error">出错</string>
     <string name="control_panel_progress_paused">已暂停</string>
     <string name="control_panel_progress_unavailable">暂不可用</string>
+    <string name="control_panel_dial_hass_title">智能家居</string>
+    <string name="control_panel_dial_hass_on">开</string>
+    <string name="control_panel_dial_hass_off">关</string>
+    <string name="control_panel_dial_hass_empty">还没有设备，请在电脑端「智能家居」里添加。</string>
+    <string name="control_panel_dial_hass_not_configured">尚未配置 Home Assistant</string>
+    <string name="control_panel_dial_hass_offline">电脑未连接 Home Assistant</string>
+    <string name="control_panel_dial_hass_connecting">正在连接 Home Assistant…</string>
+    <string name="control_panel_dial_hass_stale">数据已过期</string>
 </resources>

@@ -22,6 +22,7 @@ data class PanelSessionState(
     val error: String = "",
     val weather: PanelWeatherSnapshot? = null,
     val progress: PanelWorkProgress? = null,
+    val hass: PanelHassState? = null,
 )
 
 @Serializable
@@ -100,6 +101,20 @@ class PanelSession(
         if (previous != null && (snapshot.sequence < previous.sequence || snapshot.fetchedAt < previous.fetchedAt)) return false
         hasSessionProgress = true
         mutableState.value = current.copy(progress = snapshot)
+        return true
+    }
+
+    /** Live smart-home snapshot; accepted only inside a READY session with the current revision. */
+    @Synchronized
+    fun receiveHass(revision: Long, raw: String, now: Long = System.currentTimeMillis() / 1000): Boolean {
+        val current = mutableState.value
+        val config = current.config ?: return false
+        if (current.connection != PanelConnection.READY || revision != config.revision) return false
+        val snapshot = PanelHassState.parse(raw) ?: return false
+        if (snapshot.fetchedAt > now + 60) return false
+        val previous = current.hass
+        if (previous != null && snapshot.fetchedAt < previous.fetchedAt) return false
+        mutableState.value = current.copy(hass = snapshot)
         return true
     }
 

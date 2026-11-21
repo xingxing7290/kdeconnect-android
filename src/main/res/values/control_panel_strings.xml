@@ -75,4 +75,12 @@
     <string name="control_panel_progress_error">Error</string>
     <string name="control_panel_progress_paused">Paused</string>
     <string name="control_panel_progress_unavailable">Unavailable</string>
+    <string name="control_panel_dial_hass_title">Smart home</string>
+    <string name="control_panel_dial_hass_on">On</string>
+    <string name="control_panel_dial_hass_off">Off</string>
+    <string name="control_panel_dial_hass_empty">No devices yet. Add them in the desktop app under Smart home.</string>
+    <string name="control_panel_dial_hass_not_configured">Home Assistant is not configured</string>
+    <string name="control_panel_dial_hass_offline">Computer is not connected to Home Assistant</string>
+    <string name="control_panel_dial_hass_connecting">Connecting to Home Assistant…</string>
+    <string name="control_panel_dial_hass_stale">Readings are out of date</string>
 </resources>

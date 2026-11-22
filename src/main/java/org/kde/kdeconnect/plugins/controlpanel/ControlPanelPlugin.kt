@@ -57,7 +57,7 @@ class ControlPanelPlugin : Plugin() {
     override val description: String get() = context.getString(R.string.control_panel_description)
     override val settingsScope = SettingsScope.PER_DEVICE
     override val supportedPacketTypes = arrayOf(CONFIG, STATE, RESULT, ASSET, DIAL, PROGRESS, HASS)
-    override val outgoingPacketTypes = arrayOf(REQUEST)
+    override val outgoingPacketTypes = arrayOf(REQUEST, HASS_COMMAND)
 
     override fun getUiButtons() = listOf(
         PluginUiButton(displayName, R.drawable.run_command_plugin_icon_24dp) { activity ->

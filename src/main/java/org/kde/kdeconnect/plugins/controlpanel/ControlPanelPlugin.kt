@@ -56,7 +56,7 @@ class ControlPanelPlugin : Plugin() {
     override val displayName: String get() = context.getString(R.string.control_panel_title)
     override val description: String get() = context.getString(R.string.control_panel_description)
     override val settingsScope = SettingsScope.PER_DEVICE
-    override val supportedPacketTypes = arrayOf(CONFIG, STATE, RESULT, ASSET, DIAL, PROGRESS, HASS)
+    override val supportedPacketTypes = arrayOf(CONFIG, STATE, RESULT, ASSET, DIAL, PROGRESS, HASS, SYSINFO)
     override val outgoingPacketTypes = arrayOf(REQUEST, HASS_COMMAND)
 
     override fun getUiButtons() = listOf(
@@ -182,6 +182,7 @@ class ControlPanelPlugin : Plugin() {
         if (np.type == ASSET && np.serialize().length > 4096) { np.payload?.close(); return false }
         if ((np.type == DIAL || np.type == PROGRESS) && np.serialize().length > 16_384) return false
         if (np.type == HASS && np.serialize().length > 65_536) return false
+        if (np.type == SYSINFO && np.serialize().length > 16_384) return false
         // Access the wire body to reject type coercion in the generic NetworkPacket getters.
         val body = try {
             JsonHelper.json.parseToJsonElement(np.serialize()).let { (it as JsonObject)["body"] as JsonObject }
@@ -192,7 +193,7 @@ class ControlPanelPlugin : Plugin() {
             np.payload?.close(); return false
         }
         if (number(body, "protocolVersion") != 1L) {
-            if (np.type == DIAL || np.type == PROGRESS || np.type == HASS) return false
+            if (np.type == DIAL || np.type == PROGRESS || np.type == HASS || np.type == SYSINFO) return false
             if (np.type == ASSET) { np.payload?.close(); iconProblem.value = true; return false }
             withCurrentSession(receivingSession) { session.failed("unsupported_version"); true }
             return false
@@ -213,6 +214,10 @@ class ControlPanelPlugin : Plugin() {
             HASS -> {
                 val revision = number(body, "revision") ?: return false
                 withCurrentSession(receivingSession) { session.receiveHass(revision, body.toString()) }
+            }
+            SYSINFO -> {
+                val revision = number(body, "revision") ?: return false
+                withCurrentSession(receivingSession) { session.receiveSysInfo(revision, body.toString()) }
             }
             ASSET -> assets?.receive(body, np.payload) ?: false.also { np.payload?.close() }
             CONFIG -> {
@@ -272,5 +277,6 @@ class ControlPanelPlugin : Plugin() {
         const val PROGRESS = "kdeconnect.controlpanel.progress"
         const val HASS = "kdeconnect.controlpanel.hass"
         const val HASS_COMMAND = "kdeconnect.controlpanel.hass_command"
+        const val SYSINFO = "kdeconnect.controlpanel.sysinfo"
     }
 }

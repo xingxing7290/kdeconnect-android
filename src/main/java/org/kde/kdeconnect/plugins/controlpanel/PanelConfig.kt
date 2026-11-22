@@ -66,7 +66,7 @@ data class PanelConfig(
         private val ASSET_ID = Regex("[a-f0-9]{64}")
         private val COLOR = Regex("#[a-fA-F0-9]{6}")
         private val BUTTON_KINDS = setOf("program", "website", "file", "folder", "shortcut", "system", "command")
-        private val DIALS = setOf("digital", "analog", "weather", "info", "car", "hass")
+        private val DIALS = setOf("digital", "analog", "weather", "info", "car", "hass", "sysinfo")
 
         fun parse(raw: String): PanelConfig {
             require(raw.length <= MAX_BYTES && raw.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) { "config_too_large" }

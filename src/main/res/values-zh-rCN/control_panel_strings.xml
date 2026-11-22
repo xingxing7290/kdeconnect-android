@@ -104,4 +104,15 @@
     <string name="control_panel_hass_last_command">最近一次操作</string>
     <string name="control_panel_hass_command_sent">已控制 %1$s</string>
     <string name="control_panel_hass_command_failed">控制 %1$s 失败：%2$s</string>
+    <string name="control_panel_dial_sys_title">电脑状态</string>
+    <string name="control_panel_dial_sys_cpu">CPU</string>
+    <string name="control_panel_dial_sys_memory">内存</string>
+    <string name="control_panel_dial_sys_disk">磁盘</string>
+    <string name="control_panel_dial_sys_network">网络 ↓ / ↑</string>
+    <string name="control_panel_dial_sys_uptime">运行时间</string>
+    <string name="control_panel_dial_sys_processes">进程数</string>
+    <string name="control_panel_dial_sys_offline">电脑未连接</string>
+    <string name="control_panel_dial_sys_not_configured">电脑端尚未开启硬件状态采集</string>
+    <string name="control_panel_dial_sys_error">硬件信息采集失败</string>
+    <string name="control_panel_dial_sys_stale">数据已过期</string>
 </resources>

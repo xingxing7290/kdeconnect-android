@@ -104,4 +104,15 @@
     <string name="control_panel_hass_last_command">Last command</string>
     <string name="control_panel_hass_command_sent">Controlled %1$s</string>
     <string name="control_panel_hass_command_failed">Failed to control %1$s: %2$s</string>
+    <string name="control_panel_dial_sys_title">Computer</string>
+    <string name="control_panel_dial_sys_cpu">CPU</string>
+    <string name="control_panel_dial_sys_memory">Memory</string>
+    <string name="control_panel_dial_sys_disk">Disk</string>
+    <string name="control_panel_dial_sys_network">Network ↓ / ↑</string>
+    <string name="control_panel_dial_sys_uptime">Uptime</string>
+    <string name="control_panel_dial_sys_processes">Processes</string>
+    <string name="control_panel_dial_sys_offline">Computer is not connected</string>
+    <string name="control_panel_dial_sys_not_configured">Hardware monitoring is off on the computer</string>
+    <string name="control_panel_dial_sys_error">Hardware sampling failed</string>
+    <string name="control_panel_dial_sys_stale">Readings are out of date</string>
 </resources>

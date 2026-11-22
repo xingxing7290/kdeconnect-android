@@ -23,6 +23,7 @@ data class PanelSessionState(
     val weather: PanelWeatherSnapshot? = null,
     val progress: PanelWorkProgress? = null,
     val hass: PanelHassState? = null,
+    val sysInfo: PanelSystemInfo? = null,
 )
 
 @Serializable
@@ -115,6 +116,20 @@ class PanelSession(
         val previous = current.hass
         if (previous != null && snapshot.fetchedAt < previous.fetchedAt) return false
         mutableState.value = current.copy(hass = snapshot)
+        return true
+    }
+
+    /** Live desktop hardware snapshot; same session/revision rules as the other live packets. */
+    @Synchronized
+    fun receiveSysInfo(revision: Long, raw: String, now: Long = System.currentTimeMillis() / 1000): Boolean {
+        val current = mutableState.value
+        val config = current.config ?: return false
+        if (current.connection != PanelConnection.READY || revision != config.revision) return false
+        val snapshot = PanelSystemInfo.parse(raw) ?: return false
+        if (snapshot.fetchedAt > now + 60) return false
+        val previous = current.sysInfo
+        if (previous != null && snapshot.fetchedAt < previous.fetchedAt) return false
+        mutableState.value = current.copy(sysInfo = snapshot)
         return true
     }
 

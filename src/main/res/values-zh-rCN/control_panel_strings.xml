@@ -91,4 +91,17 @@
     <string name="control_panel_hass_close">关闭</string>
     <string name="control_panel_hass_ready">已连接，状态实时更新</string>
     <string name="control_panel_hass_error">Home Assistant 返回错误：%1$s</string>
+    <string name="control_panel_hass_err_disabled">智能家居尚未启用</string>
+    <string name="control_panel_hass_err_offline">Home Assistant 当前不在线</string>
+    <string name="control_panel_hass_err_invalid_url">Home Assistant 地址无效，请在电脑端检查</string>
+    <string name="control_panel_hass_err_auth_invalid">长期访问令牌无效，请在电脑端重新生成并填写</string>
+    <string name="control_panel_hass_err_request_failed">请求 Home Assistant 失败，请稍后重试</string>
+    <string name="control_panel_hass_err_unknown_entity">该设备不在已选列表中</string>
+    <string name="control_panel_hass_err_unsupported_entity">该设备类型暂不支持控制</string>
+    <string name="control_panel_hass_err_unknown_action">不支持的操作</string>
+    <string name="control_panel_hass_err_disconnected">与 Home Assistant 的连接已断开</string>
+    <string name="control_panel_hass_err_unknown">Home Assistant 返回：%1$s</string>
+    <string name="control_panel_hass_last_command">最近一次操作</string>
+    <string name="control_panel_hass_command_sent">已控制 %1$s</string>
+    <string name="control_panel_hass_command_failed">控制 %1$s 失败：%2$s</string>
 </resources>

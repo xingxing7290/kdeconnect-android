@@ -91,4 +91,17 @@
     <string name="control_panel_hass_close">Close</string>
     <string name="control_panel_hass_ready">Connected, updates arrive instantly</string>
     <string name="control_panel_hass_error">Home Assistant error: %1$s</string>
+    <string name="control_panel_hass_err_disabled">Smart home is not enabled</string>
+    <string name="control_panel_hass_err_offline">Home Assistant is offline</string>
+    <string name="control_panel_hass_err_invalid_url">Invalid Home Assistant address; check it on the desktop</string>
+    <string name="control_panel_hass_err_auth_invalid">The long-lived token is invalid; create a new one on the desktop</string>
+    <string name="control_panel_hass_err_request_failed">Home Assistant request failed; try again</string>
+    <string name="control_panel_hass_err_unknown_entity">That entity is not in the selected list</string>
+    <string name="control_panel_hass_err_unsupported_entity">That entity type cannot be controlled yet</string>
+    <string name="control_panel_hass_err_unknown_action">Unsupported action</string>
+    <string name="control_panel_hass_err_disconnected">Disconnected from Home Assistant</string>
+    <string name="control_panel_hass_err_unknown">Home Assistant returned: %1$s</string>
+    <string name="control_panel_hass_last_command">Last command</string>
+    <string name="control_panel_hass_command_sent">Controlled %1$s</string>
+    <string name="control_panel_hass_command_failed">Failed to control %1$s: %2$s</string>
 </resources>

@@ -83,6 +83,23 @@ internal fun PanelHassSheet(
                 overflow = TextOverflow.Ellipsis,
             )
 
+            val lastEntity = hass?.lastCommandEntity
+            if (!lastEntity.isNullOrBlank()) {
+                val lastError = hass?.lastCommandError
+                val label = panelHassEntityLabel(hass, lastEntity)
+                Text(
+                    text = if (lastError.isNullOrBlank())
+                        stringResource(R.string.control_panel_hass_command_sent, label)
+                    else
+                        stringResource(R.string.control_panel_hass_command_failed, label, panelHassErrorText(lastError)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("panel-hass-last-command"),
+                    fontSize = 12.sp,
+                    color = if (lastError.isNullOrBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
             if (entities.isEmpty()) {
                 Text(
                     panelHassEmptyText(hass),
@@ -203,7 +220,7 @@ private fun panelHassStatusText(hass: PanelHassState?, connection: PanelConnecti
         connection != PanelConnection.READY -> stringResource(R.string.control_panel_dial_hass_offline)
         hass == null -> stringResource(R.string.control_panel_dial_hass_not_configured)
         hass.status == PanelHassState.STATUS_DISABLED -> stringResource(R.string.control_panel_dial_hass_not_configured)
-        hass.status == PanelHassState.STATUS_ERROR -> stringResource(R.string.control_panel_hass_error, hass.error)
+        hass.status == PanelHassState.STATUS_ERROR -> stringResource(R.string.control_panel_hass_error, panelHassErrorText(hass.error))
         hass.status == PanelHassState.STATUS_CONNECTING || hass.status == PanelHassState.STATUS_AUTHENTICATING ->
             stringResource(R.string.control_panel_dial_hass_connecting)
         !fresh -> stringResource(R.string.control_panel_dial_hass_stale)
@@ -219,3 +236,24 @@ private fun panelHassEmptyText(hass: PanelHassState?): String {
         else -> stringResource(R.string.control_panel_dial_hass_empty)
     }
 }
+
+/** Machine codes stay on the wire; only the UI turns them into readable text. */
+@Composable
+private fun panelHassErrorText(code: String): String {
+    if (code.isBlank()) return stringResource(R.string.control_panel_hass_err_unknown, "-")
+    return when (code) {
+        "hass_disabled" -> stringResource(R.string.control_panel_hass_err_disabled)
+        "hass_offline" -> stringResource(R.string.control_panel_hass_err_offline)
+        "hass_invalid_url" -> stringResource(R.string.control_panel_hass_err_invalid_url)
+        "hass_auth_invalid" -> stringResource(R.string.control_panel_hass_err_auth_invalid)
+        "hass_request_failed" -> stringResource(R.string.control_panel_hass_err_request_failed)
+        "hass_unknown_entity" -> stringResource(R.string.control_panel_hass_err_unknown_entity)
+        "hass_unsupported_entity" -> stringResource(R.string.control_panel_hass_err_unsupported_entity)
+        "hass_unknown_action" -> stringResource(R.string.control_panel_hass_err_unknown_action)
+        "disconnected" -> stringResource(R.string.control_panel_hass_err_disconnected)
+        else -> stringResource(R.string.control_panel_hass_err_unknown, code)
+    }
+}
+
+private fun panelHassEntityLabel(hass: PanelHassState?, id: String): String =
+    hass?.entities?.firstOrNull { it.id == id }?.name?.takeIf { it.isNotBlank() } ?: id
